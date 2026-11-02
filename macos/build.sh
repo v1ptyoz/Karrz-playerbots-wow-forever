@@ -8,6 +8,7 @@
 #   macos/build.sh --clean         throw the old build folder away first
 #   macos/build.sh --jobs 6        compile with 6 jobs (default: cores, held to about 2 GB of RAM per job)
 #   macos/build.sh --tests         also build and run the unit tests (ctest)
+#   macos/build.sh --type Release  build type (default RelWithDebInfo; Release needs far less disk)
 #   macos/build.sh --from-source   compile even when this is a release download with a ready-made server (prebuilt/)
 #
 # In a release download (prebuilt/server exists) it only installs the ready-made server: no Xcode compile, no cmake,
@@ -15,15 +16,16 @@
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-SKIP_DEPS=0; CLEAN=0; JOBS=""; TESTS=0; FROM_SOURCE=0
+SKIP_DEPS=0; CLEAN=0; JOBS=""; TESTS=0; FROM_SOURCE=0; BUILD_TYPE="RelWithDebInfo"
 while [ $# -gt 0 ]; do
     case "$1" in
         --skip-deps) SKIP_DEPS=1; shift ;;
         --clean)     CLEAN=1; shift ;;
         --jobs)      JOBS="$2"; shift 2 ;;
         --tests)     TESTS=1; shift ;;
+        --type)      BUILD_TYPE="$2"; shift 2 ;;
         --from-source) FROM_SOURCE=1; shift ;;
-        -h|--help)   sed -n '2,15p' "$0"; exit 0 ;;
+        -h|--help)   sed -n '2,16p' "$0"; exit 0 ;;
         *)           die "Unknown option: $1 (see --help)" ;;
     esac
 done
@@ -138,7 +140,7 @@ if [ -z "$JOBS" ]; then
 fi
 BP="$(brew --prefix)"
 cmake -S "$WOWF_SRC" -B "$WOWF_BUILD" -G Ninja \
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_INSTALL_PREFIX="$WOWF_PREFIX" \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DSERVERS=1 -DTOOLS=1 -DSCRIPTS=static -DBUILD_PLAYERBOT_V2=1 -DBUILD_TESTING="$TESTS" -DWITH_WARNINGS=0 \

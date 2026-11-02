@@ -30,7 +30,7 @@ jobs:
     env:
       WOWF_HOME: ${{ github.workspace }}/../wowf
       CCACHE_DIR: ${{ github.workspace }}/../ccache
-      CCACHE_MAXSIZE: 6G
+      CCACHE_MAXSIZE: 3G
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
       CCACHE_COMPILERCHECK: content
       HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
@@ -49,6 +49,21 @@ jobs:
         echo "version=$v" >> "$GITHUB_OUTPUT"
         echo "Version $v, $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, macOS $(sw_vers -productVersion)"
 
+    - name: Free disk space
+      # the runner has little free disk; the build needs ~25 GB. Drop what this job never uses.
+      run: |
+        df -h / | tail -1
+        sel="$(xcode-select -p | sed 's#/Contents/Developer$##')"
+        for x in /Applications/Xcode*.app; do
+          [ "$x" = "$sel" ] || [ "$(readlink "$x" 2>/dev/null)" = "$sel" ] || sudo rm -rf "$x" &
+        done
+        xcrun simctl runtime delete all >/dev/null 2>&1 || true
+        sudo rm -rf ~/Library/Developer/CoreSimulator /Library/Developer/CoreSimulator/Profiles/Runtimes \
+          ~/Library/Android /usr/local/share/dotnet ~/.dotnet /usr/local/lib/node_modules ~/.rustup ~/.cargo \
+          /opt/hostedtoolcache/CodeQL /Users/runner/hostedtoolcache/CodeQL 2>/dev/null || true
+        wait
+        df -h / | tail -1
+
     - name: Compiler cache
       uses: actions/cache@v6
       with:
@@ -62,8 +77,9 @@ jobs:
       run: |
         tests=""
         if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ inputs.tests }}" = "true" ]; then tests="--tests"; fi
-        macos/build.sh --from-source --jobs 3 $tests
+        macos/build.sh --from-source --type Release --jobs 3 $tests
         ccache -s || true
+        df -h / | tail -1
 
     - name: Smoke test
       run: |
