@@ -22,7 +22,8 @@ From then on use the **WoW Forever Bots** icon on the Desktop (or `macos/wowfore
 server, **3** Auto-restart (restarts it if it crashes), **4** Update (installs the newest version, keeps your characters),
 **5** Create account, **6** Join our Discord. Log in with `name@local`, realm Trinity.
 
-Full guide, the game client on a Mac (CrossOver / Whisky, or a Windows PC in your network) and troubleshooting:
+**P** plays with the macOS game client (build 70707): the menu patches a clone of the app, never the original.
+Full guide, the game client on a Mac and troubleshooting:
 [`macos/README.md`](macos/README.md).
 
 ## Players: get the add-on
@@ -65,7 +66,7 @@ from the VMaNGOS database dump that you download yourself; without them the serv
 ## What you need, and where to get it
 
 - **The server code**: this repository holds our changes on top of advocaite's `forever` branch (https://github.com/advocaite/TrinityCore/tree/forever, commit `367ac384`, based on TrinityCore). Follow "Server owners" above.
-- **The game client**: the WoW Forever (Classic beta) client, build **70450**, and advocaite's launcher that applies the server key: https://github.com/advocaite/foreverlauncher. Both come from advocaite's Forever project; we do not distribute client files.
+- **The game client**: the WoW Forever game from Battle.net, build **70707** (macOS: `macos/wowforever.sh play` applies the server key to a copy of the app; Windows: advocaite's launcher https://github.com/advocaite/foreverlauncher). We do not distribute client files.
 - **Vanilla (1.12) data**: the VMaNGOS project (https://github.com/vmangos/core) and its public database dump `world_full_14_june_2021` (https://github.com/brotalnia/database). You download it yourself; `tools/classic_spell_values/build_vanilla_data.py` turns it into the SQL files the server uses. Nothing from the dump is in this repository.
 - **Maps**: extracted from your own client with the tools in this repository (`tools/extract_client_data.sh`).
 - **macOS setup**: [`macos/`](macos/README.md) builds and runs the same server we run, with an **Update** item that installs each new version and keeps your characters.

@@ -331,4 +331,4 @@ if [ $NO_START -eq 0 ]; then
 fi
 say ""
 say "${C_B}From now on:${C_0} double-click 'WoW Forever Bots' on the Desktop (or run macos/wowforever.sh)."
-say "Start the game from advocaite's ForeverLauncher, log in with <name>@local, realm Trinity, then type /fb in game."
+say "Play: menu P (or macos/wowforever.sh play) starts the macOS game; log in with <name>@local, realm Trinity, then type /fb."

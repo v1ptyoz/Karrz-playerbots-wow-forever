@@ -36,7 +36,7 @@ WOWF_TDB_FILES="TDB_full_world_forever_2026_10_14.sql TDB_full_hotfixes_forever_
 
 WOWF_DISCORD="https://discord.gg/Jk596N3xun"
 WOWF_LOGIN_HOST="trinity.actual.battle.net"
-WOWF_CLIENT_BUILD="70450"
+WOWF_CLIENT_BUILD="70707"
 
 # --- output -------------------------------------------------------------------------------------------------------
 if [ -t 1 ]; then

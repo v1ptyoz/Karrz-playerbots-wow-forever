@@ -8,8 +8,8 @@ the add-on, and a menu with Start, Shut down, Auto-restart, Update, Create accou
 
 - macOS 26 or newer (14 or newer works too), 16 GB RAM or more (8 GB runs with fewer world bots), about 60 GB free disk
   while the maps are extracted (about 15 GB stay: source, build, server, maps).
-- The WoW Forever game client, build **70450** (the folder that holds `.build.info` and `_classic_beta_`), and advocaite's
-  [ForeverLauncher](https://github.com/advocaite/foreverlauncher). See [The game client on a Mac](#the-game-client-on-a-mac).
+- The WoW Forever game from Battle.net for macOS, build **70707** (the folder that holds `.build.info` and
+  `_classic_beta_`). See [The game client on a Mac](#the-game-client-on-a-mac).
 - An internet connection for the first install (Homebrew packages, the core source, the world database).
 
 Nothing else: the scripts install the Xcode Command Line Tools and Homebrew if they are missing, and then
@@ -72,15 +72,34 @@ Backups go to `~/WoWForever/backups/<date>/`.
 
 ## The game client on a Mac
 
-The WoW Forever client (`_classic_beta_/WowB.exe`) and advocaite's ForeverLauncher are Windows programs. Either:
+The WoW Forever game from Battle.net also comes as a macOS app (build **1.60.1.70707**). `sql/custom/auth/2026_11_02_00_auth_classic_70707.sql` teaches the server
+that build and moves the realms to it (a realm accepts only its own build).
+Play with it from the menu (**P**) or:
 
-- **On this Mac**: run them with CrossOver, Whisky or another Wine. `install.sh` finds a game folder inside a bottle,
-  installs the add-on there and sets everything the client needs (the hosts line and the certificate are shared with
-  Wine). If the launcher reports a certificate error, also import `~/WoWForever/server/certs/forever_root_ca.crt` into
-  the bottle's Windows certificate store (Trusted Root Certification Authorities).
-- **On a Windows PC in your network**: make the server reachable from it (below) and start the game there as usual.
+```bash
+~/Karrz-playerbots-wow-forever/macos/wowforever.sh play
+```
 
-Then start the game from the ForeverLauncher, log in with `name@local` and your password, realm Trinity, and type `/fb`.
+What it does (`macos/forever_client.py`), and why nothing of the official client changes:
+
+- The server signs one packet (SMSG_ENTER_ENCRYPTED_MODE, Ed25519) that the client checks with a key built into the
+  game program. ForeverLauncher swaps that key on Windows; on the Mac the first `play` makes an **APFS clone** of the app,
+  `<app> (Forever).app`, next to the original (no extra disk space), and replaces the key **only in the clone**, then signs
+  the clone for this Mac (ad-hoc). The original app is never written to; its SHA-256 is checked before and after.
+- The key is only replaced when it is found without doubt (exactly one separate table of Ed25519 public keys right next
+  to the server's `EnableEncryptionContext` constant, in every part of the program). Otherwise nothing is changed and
+  `wowforever.sh client scout` writes a report (`~/WoWForever/client-scout.json`, read only) to send us.
+- While you play here, `WTF/Config.wtf` (with `SET portal "trinity.actual.battle.net"`) and `Cache` are Forever's own
+  copies; when the game quits the official ones are back in place, so Battle.net and the official realms see exactly
+  what they saw before. After a crash or power cut: `wowforever.sh client restore`.
+- When Battle.net updates the game, the next `play` notices it and patches the new version.
+- `wowforever.sh client remove` deletes the clone and Forever's settings; `client status` shows what is there.
+
+Not verified yet: that build 70707 speaks the same protocol as 70450 (every update since did, see advocaite's commits for
+70532 to 70658), and that the game accepts running from an ad-hoc signed copy. If the login stops after the realm list,
+send `Server.log` and the scout report.
+
+Windows players (another PC in your network) still use advocaite's ForeverLauncher.
 
 ## Playing from another computer
 

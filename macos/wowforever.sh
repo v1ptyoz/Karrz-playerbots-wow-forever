@@ -13,6 +13,8 @@
 #   macos/wowforever.sh addon         install / refresh the add-on in the game folder
 #   macos/wowforever.sh backup        back up the databases now
 #   macos/wowforever.sh discord       open our Discord
+#   macos/wowforever.sh play          play with the macOS game client (starts the server if needed)
+#   macos/wowforever.sh client scout|patch|restore|remove|status   the macOS client copy (macos/forever_client.py)
 #
 # The servers run in a tmux session called "wowforever" (windows "world" and "bnet"), so they keep running when the
 # Terminal window is closed; the Mac is kept awake while worldserver runs.
@@ -219,6 +221,21 @@ cmd_logs() {
     tail -n 40 -F "$WOWF_LOGS/Server.log" "$WOWF_LOGS/Playerbot.log" 2>/dev/null
 }
 
+# The macOS game client: macos/forever_client.py patches a copy of the app (the original is never changed) and swaps
+# in Forever's own Config.wtf and Cache while you play.
+client_tool() {
+    local py=/usr/bin/python3
+    command -v python3 >/dev/null 2>&1 && py="$(command -v python3)"
+    "$py" -I "$WOWF_REPO/macos/forever_client.py" "$@" ${WOWF_CLIENT:+--client "$WOWF_CLIENT"}
+}
+
+cmd_play() {
+    need_install
+    if ! world_running || ! bnet_running; then cmd_start; fi
+    client_tool play \
+        || die "The game did not start. 'macos/wowforever.sh client scout' writes a report (~/WoWForever/client-scout.json) to send us."
+}
+
 cmd_menu() {
     while true; do
         printf '\n%s WoW Forever Bots (macOS) %s\n' "$C_B" "$C_0"
@@ -233,6 +250,7 @@ cmd_menu() {
         say "  6  Join our Discord"
         say "  7  Console          8  Logs          9  Status"
         say "  A  Install / refresh the add-on      B  Back up the databases"
+        say "  P  Play with the macOS game client (the original app stays unchanged)"
         say "  Q  Quit (the server keeps running)"
         printf '\nChoice: '
         local c; read -r c || exit 0
@@ -248,6 +266,7 @@ cmd_menu() {
             9) cmd_status ;;
             A) ( "$WOWF_REPO/macos/install-addon.sh" ) || true ;;
             B) ( cmd_backup ) || true ;;
+            P) ( cmd_play ) || true ;;
             Q|"") exit 0 ;;
             *) say "?" ;;
         esac
@@ -267,6 +286,8 @@ case "${1:-menu}" in
     addon)       shift; "$WOWF_REPO/macos/install-addon.sh" "$@" ;;
     backup)      cmd_backup ;;
     discord)     open "$WOWF_DISCORD" ;;
-    -h|--help)   sed -n '2,19p' "$0" ;;
+    play)        cmd_play ;;
+    client)      shift; client_tool "${1:-status}" "${@:2}" ;;
+    -h|--help)   sed -n '2,21p' "$0" ;;
     *)           die "Unknown command: $1 (see --help)" ;;
 esac
