@@ -92,6 +92,7 @@ jobs:
         ls "$WOWF_HOME/server/etc/worldserver.conf.d"
 
     - name: Package (macos/package.sh)
+      timeout-minutes: 30
       run: macos/package.sh --version "${{ steps.v.outputs.version }}" --out dist --repo "${{ github.repository }}"
 
     - name: Keep the download

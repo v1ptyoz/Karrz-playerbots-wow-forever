@@ -54,10 +54,7 @@ mkdir -p "$PRE/server/etc"
     done )
 
 step "3/5 Libraries (so no Homebrew build packages are needed)"
-brew list --formula dylibbundler >/dev/null 2>&1 || brew install dylibbundler
-args=()
-for b in "$PRE"/server/bin/*; do args+=(-x "$b"); done
-dylibbundler -cd -of -b "${args[@]}" -d "$PRE/server/lib" -p "@executable_path/../lib/" -s "$(brew --prefix)/lib" </dev/null >/dev/null
+"$WOWF_REPO/macos/bundle-libs.sh" "$PRE/server/lib" "$PRE"/server/bin/* </dev/null
 # install_name_tool breaks the signatures: sign everything again (ad-hoc), Apple Silicon refuses unsigned code
 for f in "$PRE"/server/lib/* "$PRE"/server/bin/*; do codesign --force --sign - "$f" >/dev/null 2>&1 || die "codesign $f"; done
 bad="$(for f in "$PRE"/server/bin/* "$PRE"/server/lib/*; do otool -L "$f" | tail -n +2 | awk '{print $1}'; done \

@@ -147,7 +147,9 @@ cmake -S "$WOWF_SRC" -B "$WOWF_BUILD" -G Ninja \
     -DOPENSSL_ROOT_DIR="$BP/opt/openssl@3" \
     -DMYSQL_ROOT_DIR="$BP/opt/mysql" \
     -DREADLINE_ROOT_DIR="$BP/opt/readline" \
-    -DBoost_ROOT="$BP/opt/boost"
+    -DBoost_ROOT="$BP/opt/boost" \
+    -DCMAKE_EXE_LINKER_FLAGS="-Wl,-headerpad_max_install_names" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-headerpad_max_install_names"
 info "Compiling with $JOBS jobs (the first build takes a while; ccache makes the next ones fast)"
 cmake --build "$WOWF_BUILD" -j "$JOBS"
 
