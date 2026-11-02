@@ -32,6 +32,17 @@ case "$WOWF_HOME" in *" "*) die "WOWF_HOME must not contain spaces: $WOWF_HOME" 
 mkdir -p "$WOWF_HOME"
 save_env WOWF_HOME "$WOWF_HOME"
 
+# A release download runs from wherever it was unpacked (Downloads, Desktop...): it moves itself to $WOWF_HOME/app
+# first, so the Desktop icon and the Update item always find it there.
+WOWF_APP="$WOWF_HOME/app"
+if [ -d "$WOWF_REPO/prebuilt" ] && [ "$WOWF_REPO" != "$WOWF_APP" ]; then
+    step "Moving the download to $WOWF_APP"
+    xattr -dr com.apple.quarantine "$WOWF_REPO" 2>/dev/null || true
+    mkdir -p "$WOWF_APP"
+    rsync -a --delete --filter 'P sql/custom/world/2026_10_12_5*_world_classic_vanilla_*.sql' "$WOWF_REPO/" "$WOWF_APP/"
+    exec "$WOWF_APP/macos/install.sh" "$@"
+fi
+
 # --- server programs ------------------------------------------------------------------------------------------------
 if [ ! -x "$WOWF_BIN/worldserver" ] || [ ! -x "$WOWF_BIN/bnetserver" ]; then
     step "The server is not built yet"

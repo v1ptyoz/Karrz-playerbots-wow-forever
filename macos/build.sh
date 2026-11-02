@@ -8,17 +8,22 @@
 #   macos/build.sh --clean         throw the old build folder away first
 #   macos/build.sh --jobs 6        compile with 6 jobs (default: cores, held to about 2 GB of RAM per job)
 #   macos/build.sh --tests         also build and run the unit tests (ctest)
+#   macos/build.sh --from-source   compile even when this is a release download with a ready-made server (prebuilt/)
+#
+# In a release download (prebuilt/server exists) it only installs the ready-made server: no Xcode compile, no cmake,
+# just the few Homebrew packages the server needs at run time (mysql, openssl, tmux, 7-Zip).
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-SKIP_DEPS=0; CLEAN=0; JOBS=""; TESTS=0
+SKIP_DEPS=0; CLEAN=0; JOBS=""; TESTS=0; FROM_SOURCE=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --skip-deps) SKIP_DEPS=1; shift ;;
         --clean)     CLEAN=1; shift ;;
         --jobs)      JOBS="$2"; shift 2 ;;
         --tests)     TESTS=1; shift ;;
-        -h|--help)   sed -n '2,11p' "$0"; exit 0 ;;
+        --from-source) FROM_SOURCE=1; shift ;;
+        -h|--help)   sed -n '2,15p' "$0"; exit 0 ;;
         *)           die "Unknown option: $1 (see --help)" ;;
     esac
 done
@@ -44,7 +49,21 @@ fi
 load_brew_env || die "Homebrew was not found after the install."
 ok "Homebrew: $(brew --prefix)"
 
-BREW_PACKAGES="git cmake ninja ccache boost openssl@3 mysql readline bzip2 zlib tmux sevenzip"
+PREBUILT="$WOWF_REPO/prebuilt"
+USE_PREBUILT=0
+if [ $FROM_SOURCE -eq 0 ] && [ -x "$PREBUILT/server/bin/worldserver" ]; then
+    if [ "$(grep '^arch=' "$PREBUILT/VERSION" 2>/dev/null | cut -d= -f2)" = "$(uname -m)" ]; then
+        USE_PREBUILT=1
+    else
+        warn "The ready-made server is for $(grep '^arch=' "$PREBUILT/VERSION" | cut -d= -f2), this Mac is $(uname -m): compiling instead."
+    fi
+fi
+
+if [ $USE_PREBUILT -eq 1 ]; then
+    BREW_PACKAGES="openssl@3 mysql tmux sevenzip"
+else
+    BREW_PACKAGES="git cmake ninja ccache boost openssl@3 mysql readline bzip2 zlib tmux sevenzip"
+fi
 if [ $SKIP_DEPS -eq 0 ]; then
     missing=""
     for p in $BREW_PACKAGES; do
@@ -58,6 +77,35 @@ if [ $SKIP_DEPS -eq 0 ]; then
     ok "Packages: $BREW_PACKAGES"
 fi
 load_brew_env
+
+# --- ready-made server (release download) ----------------------------------------------------------------------------
+if [ $USE_PREBUILT -eq 1 ]; then
+    step "2/2 Installing the ready-made server ($(grep '^version=' "$PREBUILT/VERSION" | cut -d= -f2))"
+    xattr -dr com.apple.quarantine "$WOWF_REPO" 2>/dev/null || true   # a browser download marks every file
+    mkdir -p "$WOWF_BIN" "$WOWF_PREFIX/lib" "$WOWF_ETC" "$WOWF_SRC"
+    rsync -a --delete "$PREBUILT/server/bin/" "$WOWF_BIN/" --exclude 'TDB_full_*' --exclude '.tdb-unpack'
+    rsync -a --delete "$PREBUILT/server/lib/" "$WOWF_PREFIX/lib/"
+    # settings: the .dist files and the defaults the build would refresh are replaced, your own files never
+    ( cd "$PREBUILT/server/etc" && find . -type f | while read -r f; do
+        dst="$WOWF_ETC/$f"; mkdir -p "$(dirname "$dst")"
+        case "$f" in
+            *.dist|*/zz-0-playerbot-defaults.conf) cp "$f" "$dst" ;;
+            *) [ -f "$dst" ] || cp "$f" "$dst" ;;
+        esac
+    done )
+    # worldserver's SourceDirectory: the SQL it applies at start; vanilla files you built yourself are kept
+    rsync -a --delete --filter 'P sql/custom/world/2026_10_12_5*_world_classic_vanilla_*.sql' \
+        "$PREBUILT/source/" "$WOWF_SRC/"
+    [ -d "$WOWF_REPO/sql/custom/world" ] && rsync -a "$WOWF_REPO/sql/custom/world/" "$WOWF_SRC/sql/custom/world/"
+    for b in worldserver bnetserver mapextractor vmap4extractor vmap4assembler mmaps_generator; do
+        [ -x "$WOWF_BIN/$b" ] || die "$b is missing from the download"
+    done
+    "$WOWF_BIN/worldserver" --version >/dev/null 2>&1 || die "The ready-made worldserver does not start on this Mac (macOS $(sw_vers -productVersion)). Try: macos/build.sh --from-source"
+    save_env WOWF_BUILT_FROM "$(grep '^version=' "$PREBUILT/VERSION" | cut -d= -f2) (ready-made)"
+    ok "Installed: $WOWF_BIN"
+    say "Next: macos/install.sh (first time) or macos/wowforever.sh (menu)."
+    exit 0
+fi
 
 # --- 2. source ------------------------------------------------------------------------------------------------------
 step "2/4 Source: advocaite/TrinityCore ($WOWF_UPSTREAM_BRANCH @ ${WOWF_UPSTREAM_COMMIT:-latest}) + this repository"

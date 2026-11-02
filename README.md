@@ -7,8 +7,14 @@ WoW Forever (Classic 1.60 beta) TrinityCore server by advocaite.
 
 ## Run it on macOS
 
-The server runs on macOS 26 (Tahoe) and newer, Apple Silicon or Intel. Two commands set up everything the old Windows
-repack did (build, MySQL and databases, maps from your own client, login certificate, add-on, Desktop icon, your account):
+The server runs on macOS 26 (Tahoe) and newer, Apple Silicon or Intel.
+
+**Ready-made (Apple Silicon):** download `WoW-Forever-Bots-macOS-arm64-<version>.tar.gz` from the
+[Releases page](https://github.com/v1ptyoz/Karrz-playerbots-wow-forever/releases/latest), unpack it and run
+`WoWForeverBots/macos/install.sh` in Terminal. No compiling.
+
+**From source** (any Mac): two commands set up everything the old Windows repack did (build, MySQL and databases, maps
+from your own client, login certificate, add-on, Desktop icon, your account):
 
 ```bash
 git clone https://github.com/Karrz1/Karrz-playerbots-wow-forever.git ~/Karrz-playerbots-wow-forever

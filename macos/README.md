@@ -17,6 +17,13 @@ Nothing else: the scripts install the Xcode Command Line Tools and Homebrew if t
 
 ## Install
 
+**Ready-made download (Apple Silicon):** take `WoW-Forever-Bots-macOS-arm64-<version>.tar.gz` from the Releases page,
+unpack it and run `WoWForeverBots/macos/install.sh`. It moves itself to `~/WoWForever/app`, installs the ready-made server
+(`prebuilt/`) instead of compiling, and does steps 2 to 8 below. Update (menu 4) then fetches each new release.
+Releases are made by `.github/workflows/macos-release.yml` on a GitHub macOS runner (build, unit tests, `macos/package.sh`).
+
+**From source:**
+
 ```bash
 git clone https://github.com/Karrz1/Karrz-playerbots-wow-forever.git ~/Karrz-playerbots-wow-forever
 ```

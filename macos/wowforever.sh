@@ -83,8 +83,10 @@ cmd_start() {
     local log_size=0
     [ -f "$WOWF_LOGS/Server.log" ] && log_size=$(wc -c < "$WOWF_LOGS/Server.log" | tr -d ' ')
     local wrun="$WOWF_HOME/.run-worldserver.sh" brun="$WOWF_HOME/.run-bnetserver.sh"
-    loop_cmd worldserver "./worldserver -c \"$WOWF_ETC/worldserver.conf\"" > "$wrun"
-    loop_cmd bnetserver "./bnetserver -c \"$WOWF_ETC/bnetserver.conf\"" > "$brun"
+    mkdir -p "$WOWF_ETC/worldserver.conf.d" "$WOWF_ETC/bnetserver.conf.d"
+    # --config-dir: a ready-made server was built elsewhere, so its built-in default folder is not this Mac's
+    loop_cmd worldserver "./worldserver -c \"$WOWF_ETC/worldserver.conf\" --config-dir \"$WOWF_ETC/worldserver.conf.d\"" > "$wrun"
+    loop_cmd bnetserver "./bnetserver -c \"$WOWF_ETC/bnetserver.conf\" --config-dir \"$WOWF_ETC/bnetserver.conf.d\"" > "$brun"
     if ! tmux_has; then
         tmux new-session -d -s "$WOWF_TMUX_SESSION" -n world -x 200 -y 50 "bash \"$wrun\""
         tmux set-option -t "$WOWF_TMUX_SESSION" history-limit 20000 >/dev/null
@@ -151,17 +153,54 @@ cmd_backup() {
     ok "Backup: $dir"
 }
 
+# Release download: fetch the newest release of the repository it came from (prebuilt/VERSION, repo=...).
+update_release() {
+    local repo cur api tag url tmp asset
+    repo="$(grep '^repo=' "$WOWF_REPO/prebuilt/VERSION" | cut -d= -f2)"
+    cur="$(grep '^version=' "$WOWF_REPO/prebuilt/VERSION" | cut -d= -f2)"
+    [ -n "$repo" ] || die "No repo= line in $WOWF_REPO/prebuilt/VERSION."
+    api="$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest")" || die "Cannot reach GitHub ($repo)."
+    tag="$(printf '%s' "$api" | sed -nE 's/^[[:space:]]*"tag_name":[[:space:]]*"([^"]+)".*/\1/p' | head -1)"
+    url="$(printf '%s' "$api" | sed -nE "s#^[[:space:]]*\"browser_download_url\":[[:space:]]*\"([^\"]*macOS-$(uname -m)-[^\"]*\\.tar\\.gz)\".*#\\1#p" | head -1)"
+    [ -n "$tag" ] && [ -n "$url" ] || die "The newest release of $repo has no macOS $(uname -m) download."
+    if [ "$tag" = "$cur" ]; then ok "You have the newest version ($cur)."; return 1; fi
+    info "Downloading $tag (you have $cur)"
+    tmp="$(mktemp -d)"; asset="$tmp/$(basename "$url")"
+    curl -fL --retry 4 -o "$asset" "$url" || die "Download failed: $url"
+    if curl -fsSL -o "$asset.sha256" "$url.sha256"; then
+        ( cd "$tmp" && shasum -a 256 -c "$(basename "$asset").sha256" >/dev/null ) || die "The download is damaged (checksum)."
+    fi
+    tar -xzf "$asset" -C "$tmp"
+    [ -x "$tmp/WoWForeverBots/prebuilt/server/bin/worldserver" ] || die "The download has no server in it."
+    rsync -a --delete --filter 'P sql/custom/world/2026_10_12_5*_world_classic_vanilla_*.sql' \
+        "$tmp/WoWForeverBots/" "$WOWF_REPO/"
+    rm -rf "$tmp"
+    ok "Version $tag unpacked into $WOWF_REPO"
+}
+
 cmd_update() {
     need_install
     local was_running=0
     world_running && was_running=1
-    [ $was_running -eq 1 ] && cmd_stop
-    cmd_backup
-    if [ -d "$WOWF_REPO/.git" ]; then
-        info "Pulling the newest version ($WOWF_REPO)"
-        git -C "$WOWF_REPO" pull --ff-only || die "git pull failed (local changes?). Nothing was changed; your backup is in $WOWF_BACKUPS."
+    if [ -d "$WOWF_REPO/prebuilt" ]; then
+        # check first, stop the server only when there is something new
+        local tmpcheck; tmpcheck="$(curl -fsSL "https://api.github.com/repos/$(grep '^repo=' "$WOWF_REPO/prebuilt/VERSION" | cut -d= -f2)/releases/latest" 2>/dev/null \
+            | sed -nE 's/^[[:space:]]*"tag_name":[[:space:]]*"([^"]+)".*/\1/p' | head -1)"
+        if [ -n "$tmpcheck" ] && [ "$tmpcheck" = "$(grep '^version=' "$WOWF_REPO/prebuilt/VERSION" | cut -d= -f2)" ]; then
+            ok "You have the newest version ($tmpcheck)."; return 0
+        fi
+        [ $was_running -eq 1 ] && cmd_stop
+        cmd_backup
+        update_release || { [ $was_running -eq 1 ] && cmd_start; return 0; }
     else
-        warn "$WOWF_REPO is not a git checkout; building what is there."
+        [ $was_running -eq 1 ] && cmd_stop
+        cmd_backup
+        if [ -d "$WOWF_REPO/.git" ]; then
+            info "Pulling the newest version ($WOWF_REPO)"
+            git -C "$WOWF_REPO" pull --ff-only || die "git pull failed (local changes?). Nothing was changed; your backup is in $WOWF_BACKUPS."
+        else
+            warn "$WOWF_REPO is not a git checkout; building what is there."
+        fi
     fi
     "$WOWF_REPO/macos/build.sh" --skip-deps
     "$WOWF_REPO/macos/install.sh" --configs-only
