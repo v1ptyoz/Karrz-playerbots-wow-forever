@@ -1,7 +1,7 @@
 name: macOS build and release
 
 # Builds the server on a real Mac (Apple Silicon), runs the unit tests and packs the ready-made download
-# (macos/package.sh). A pushed tag v* also publishes it as a GitHub release; every other run keeps the
+# (macos/package.sh). A pushed tag v* (or a manual run with "release" set) also publishes it as a GitHub release; every other run keeps the
 # download as a workflow artifact for 14 days.
 
 on:
@@ -19,6 +19,10 @@ on:
         description: 'GitHub macOS runner (macos-26, macos-15, macos-14); macOS arm64 runners are often short'
         type: string
         default: 'macos-26'
+      release:
+        description: 'Publish as a release with this tag (e.g. v0.1.14-mac1); the tag is created on this commit. Empty: artifact only'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -49,8 +53,10 @@ jobs:
     - name: Version
       id: v
       run: |
-        if [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-$(git rev-parse --short HEAD)"; fi
+        if [ -n "${{ inputs.release }}" ]; then v="${{ inputs.release }}"
+        elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-$(git rev-parse --short HEAD)"; fi
         echo "version=$v" >> "$GITHUB_OUTPUT"
+        if [ -n "${{ inputs.release }}" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then echo "publish=1" >> "$GITHUB_OUTPUT"; fi
         echo "Version $v, $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, macOS $(sw_vers -productVersion)"
 
     - name: Free disk space
@@ -103,11 +109,12 @@ jobs:
         retention-days: 14
 
     - name: Publish the release
-      if: github.ref_type == 'tag'
+      if: steps.v.outputs.publish == '1'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         notes=macos/RELEASE-NOTES.md
-        gh release create "${GITHUB_REF_NAME}" dist/* --repo "${{ github.repository }}" \
-          --title "WoW Forever Bots for macOS ${GITHUB_REF_NAME}" --notes-file "$notes" \
-          || gh release upload "${GITHUB_REF_NAME}" dist/* --repo "${{ github.repository }}" --clobber
+        tag="${{ steps.v.outputs.version }}"
+        gh release create "$tag" dist/* --repo "${{ github.repository }}" --target "${GITHUB_SHA}" \
+          --title "WoW Forever Bots for macOS $tag" --notes-file "$notes" \
+          || gh release upload "$tag" dist/* --repo "${{ github.repository }}" --clobber
