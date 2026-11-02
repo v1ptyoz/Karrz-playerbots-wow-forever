@@ -13,6 +13,7 @@
 #include <mutex>
 #include <span>
 #include <thread>
+#include "LargeStackThread.h"   // 8 MB stack on macOS too (std::thread gets 512 KB there)
 #include <unordered_set>
 #include <vector>
 
@@ -65,7 +66,7 @@ private:
     void run_one(BotId bot);
 
     size_t                  desired_count_ = 0;
-    std::vector<std::thread> workers_;
+    std::vector<Trinity::LargeStackThread> workers_;
     mutable std::mutex      mtx_;
     std::condition_variable cv_;
     std::condition_variable idle_cv_;   // signalled when a bot leaves in_flight_

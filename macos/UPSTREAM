@@ -1,0 +1,4 @@
+# advocaite's TrinityCore, branch forever: the commit this repository is copied over (macos/build.sh checks it out).
+# It is the newest core commit before this repository's last sync and the first one that has the optional-module hooks
+# (src/modules/CMakeLists.txt) the bot module needs. Set WOWF_UPSTREAM_COMMIT to try another one.
+367ac384

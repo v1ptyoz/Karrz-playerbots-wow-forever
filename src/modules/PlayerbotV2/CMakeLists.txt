@@ -223,6 +223,10 @@ set(PLAYERBOT_V2_SUBLIBS
 )
 if(MSVC)
   target_link_libraries(playerbot-v2 INTERFACE ${PLAYERBOT_V2_SUBLIBS})
+elseif(APPLE)
+  # macOS: Apple's linker (ld64 / ld-prime) searches every static archive until no symbol is left unresolved, like link.exe,
+  # and CMake has no RESCAN link-group feature for Darwin (configure would stop). A plain list, with game in it, is enough.
+  target_link_libraries(playerbot-v2 INTERFACE ${PLAYERBOT_V2_SUBLIBS} game)
 else()
   # game calls the module through PlayerbotHooks and the module calls back into game (PlayerbotAPI.cpp, ClassicSpec.cpp,
   # BotItemScorer.cpp), so game belongs in the same group; otherwise an executor that lists game before this

@@ -11,6 +11,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include "LargeStackThread.h"   // 8 MB stack on macOS too (std::thread gets 512 KB there)
 
 namespace Playerbot {
 
@@ -33,7 +34,7 @@ public:
 private:
     void run();
 
-    std::thread             thr_;
+    Trinity::LargeStackThread thr_;
     mutable std::mutex      mtx_;
     std::condition_variable cv_;
     std::deque<std::function<void()>> tasks_;

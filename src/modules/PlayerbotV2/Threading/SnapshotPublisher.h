@@ -5,6 +5,7 @@
 
 #include "Bot/BotSnapshot.h"
 #include "Group/GroupSnapshot.h"
+#include "Util/AtomicSharedPtr.h"
 #include <atomic>
 #include <memory>
 #include <shared_mutex>
@@ -40,8 +41,10 @@ private:
     //
     // The atomic is held via unique_ptr because std::atomic<shared_ptr<T>>
     // is neither copyable nor movable, which would prevent map rehashing.
-    using AtomicSnap      = std::atomic<std::shared_ptr<BotSnapshot const>>;
-    using AtomicGroupSnap = std::atomic<std::shared_ptr<GroupSnapshot const>>;
+    // AtomicSharedPtr is that type where the standard library has it (MSVC,
+    // libstdc++) and a lock-guarded slot on libc++ (macOS), see its header.
+    using AtomicSnap      = AtomicSharedPtr<BotSnapshot const>;
+    using AtomicGroupSnap = AtomicSharedPtr<GroupSnapshot const>;
     mutable std::shared_mutex                                  map_mtx_;
     std::unordered_map<BotId, std::unique_ptr<AtomicSnap>>      slots_;
     std::unordered_map<BotId, std::unique_ptr<AtomicGroupSnap>> group_slots_;
