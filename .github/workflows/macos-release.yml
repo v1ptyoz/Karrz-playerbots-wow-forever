@@ -15,6 +15,10 @@ on:
         description: 'Build and run the unit tests'
         type: boolean
         default: true
+      runner:
+        description: 'GitHub macOS runner (macos-26, macos-15, macos-14); macOS arm64 runners are often short'
+        type: string
+        default: 'macos-26'
 
 permissions:
   contents: write
@@ -25,7 +29,7 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 360
     env:
       WOWF_HOME: ${{ github.workspace }}/../wowf
@@ -68,10 +72,10 @@ jobs:
       uses: actions/cache@v6
       with:
         path: ${{ github.workspace }}/../ccache
-        key: ccache-macos15-${{ hashFiles('macos/UPSTREAM') }}-${{ github.sha }}
+        key: ccache-${{ inputs.runner || 'macos-26' }}-${{ hashFiles('macos/UPSTREAM') }}-${{ github.sha }}
         restore-keys: |
-          ccache-macos15-${{ hashFiles('macos/UPSTREAM') }}-
-          ccache-macos15-
+          ccache-${{ inputs.runner || 'macos-26' }}-${{ hashFiles('macos/UPSTREAM') }}-
+          ccache-${{ inputs.runner || 'macos-26' }}-
 
     - name: Build (macos/build.sh)
       run: |
