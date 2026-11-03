@@ -683,6 +683,65 @@ def cmd_prepare(args):
         say("  Send that log so the signing can be adjusted.")
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def build_inject():
+    """Compile the in-memory locator/patcher module (macos/forever_inject.c) to ~/WoWForever/forever_inject.dylib."""
+    src = os.path.join(SCRIPT_DIR, "forever_inject.c")
+    if not os.path.isfile(src):
+        fail("macos/forever_inject.c is missing.")
+    dylib = os.path.join(HOME, "forever_inject.dylib")
+    os.makedirs(HOME, exist_ok=True)
+    say("Building the module (clang)...")
+    run(["clang", "-std=c11", "-O2", "-dynamiclib", "-arch", "arm64", "-D_GNU_SOURCE",
+         "-framework", "Foundation", src, "-o", dylib])
+    run(["codesign", "--force", "--sign", "-", dylib])
+    return dylib
+
+
+def run_injected(dst_exe, dylib, seconds, mode):
+    """Launch the copy with the module inserted, let it work, then stop it. Returns the module's log path."""
+    log = os.path.join(HOME, "forever-inject.log")
+    try:
+        os.remove(log)
+    except OSError:
+        pass
+    env = dict(os.environ, DYLD_INSERT_LIBRARIES=dylib, FOREVER_LOG=log, FOREVER_MODE=mode)
+    say("Launching the copy with the module (%d s)..." % seconds)
+    proc = subprocess.Popen([dst_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+    try:
+        time.sleep(seconds)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(5)
+        except Exception:
+            proc.kill()
+    return log
+
+
+def cmd_probe(args):
+    """Build and inject the locator, then show what the code loads next to the context (reads memory, changes nothing)."""
+    root = find_client_root(args.client)
+    app = find_original_app(flavor_dir(root))
+    exe = app_executable(app)
+    dst = copy_path(app)
+    dst_exe = os.path.join(dst, os.path.relpath(exe, app))
+    if not os.path.isdir(dst) or not os.path.isfile(os.path.join(dst, "Contents", "forever-prepare.json")):
+        fail("Run 'client prepare' first (it makes the signed copy).")
+    dylib = build_inject()
+    log = run_injected(dst_exe, dylib, args.seconds or 40, "locate")
+    say("")
+    if os.path.isfile(log):
+        with open(log) as f:
+            txt = f.read()
+        say(txt)
+        say("Log: " + log)
+    else:
+        say("The module wrote no log (%s). It may not have loaded." % log)
+
+
 def cmd_patch(args):
     if SERVER_PUBLIC_KEY != derive_public_key(SERVER_PRIVATE_KEY):
         fail("internal: the server key does not match its private key")
@@ -907,16 +966,17 @@ def cmd_status(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("command", choices=["scout", "patch", "prepare", "play", "restore", "remove", "status"])
+    ap.add_argument("command", choices=["scout", "patch", "prepare", "probe", "play", "restore", "remove", "status"])
     ap.add_argument("--client", help="the game folder (holds .build.info and _forever_)")
     ap.add_argument("--table", action="append", metavar="CPU:OFFSET:COUNT",
                     help="patch: the key table by hand (from a reviewed scout report), once per part (x86_64, arm64)")
     ap.add_argument("--expect-sha256", help="patch with --table: the program's sha256 from the scout report")
+    ap.add_argument("--seconds", type=int, help="probe: how long to let the game run before reading memory")
     args = ap.parse_args()
     if sys.platform != "darwin" and args.command != "scout":
         fail("This is for macOS.")
-    {"scout": cmd_scout, "patch": cmd_patch, "prepare": cmd_prepare, "play": cmd_play, "restore": cmd_restore,
-     "remove": cmd_remove, "status": cmd_status}[args.command](args)
+    {"scout": cmd_scout, "patch": cmd_patch, "prepare": cmd_prepare, "probe": cmd_probe, "play": cmd_play,
+     "restore": cmd_restore, "remove": cmd_remove, "status": cmd_status}[args.command](args)
 
 
 if __name__ == "__main__":
