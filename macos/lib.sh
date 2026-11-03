@@ -117,7 +117,7 @@ save_env() {   # save_env KEY VALUE: remembers a setting in wowforever.env
     touch "$WOWF_ENV"; chmod 600 "$WOWF_ENV"
     if grep -q "^${key}=" "$WOWF_ENV"; then
         local tmp; tmp="$(mktemp)"
-        grep -v "^${key}=" "$WOWF_ENV" > "$tmp"; cat "$tmp" > "$WOWF_ENV"; rm -f "$tmp"
+        grep -v "^${key}=" "$WOWF_ENV" > "$tmp" || true; cat "$tmp" > "$WOWF_ENV"; rm -f "$tmp"
     fi
     printf '%s=%q\n' "$key" "$val" >> "$WOWF_ENV"
     eval "$key=\$val"
