@@ -303,6 +303,127 @@ def key_tables(data, lo, hi, exclude=()):
     return sorted(out, key=lambda r: (not r[2], -r[1], r[0]))
 
 
+# --- code references: which constants the code next to EnableEncryptionContext loads ----------------------------------
+XREF_WINDOW = 0x800              # bytes of code around each use of the context (the same function)
+
+
+def macho_segments(data, start):
+    """Segments of the thin Mach-O at data[start:]: [(name, vmaddr, vmsize, fileoff, filesize)] and the __text section."""
+    if data[start:start + 4] != b"\xcf\xfa\xed\xfe":
+        return [], None
+    ncmds = int.from_bytes(data[start + 16:start + 20], "little")
+    off, segs, text = start + 32, [], None
+    for _ in range(ncmds):
+        cmd = int.from_bytes(data[off:off + 4], "little")
+        size = int.from_bytes(data[off + 4:off + 8], "little")
+        if cmd == 0x19:   # LC_SEGMENT_64
+            q = lambda o: int.from_bytes(data[off + o:off + o + 8], "little")
+            name = data[off + 8:off + 24].rstrip(b"\0").decode("ascii", "replace")
+            segs.append((name, q(24), q(32), q(40), q(48)))
+            nsects = int.from_bytes(data[off + 64:off + 68], "little")
+            for k in range(nsects):
+                so = off + 72 + 80 * k
+                if data[so:so + 16].rstrip(b"\0") == b"__text" and data[so + 16:so + 32].rstrip(b"\0") == b"__TEXT":
+                    addr = int.from_bytes(data[so + 32:so + 40], "little")
+                    sz = int.from_bytes(data[so + 40:so + 48], "little")
+                    fo = int.from_bytes(data[so + 48:so + 52], "little")
+                    text = (addr, sz, fo)
+        off += size
+    return segs, text
+
+
+def _vm_to_off(segs, start, vm):
+    for _, va, vs, fo, fs in segs:
+        if va <= vm < va + fs:
+            return start + fo + (vm - va)
+    return None
+
+
+def _off_to_vm(segs, start, off):
+    for _, va, vs, fo, fs in segs:
+        if start + fo <= off < start + fo + fs:
+            return va + (off - start - fo)
+    return None
+
+
+def code_refs_arm64(data, start, text):
+    """[(pc, target)] for ADRP followed by ADD / LDR (64-bit or 128-bit) on the same register."""
+    import array
+    addr, size, fo = text
+    words = array.array("I")
+    words.frombytes(data[start + fo:start + fo + size - size % 4])
+    if sys.byteorder != "little":
+        words.byteswap()
+    out, n = [], len(words)
+    for i in range(n):
+        w = words[i]
+        if w & 0x9F000000 != 0x90000000:
+            continue
+        rd = w & 31
+        imm = ((w >> 5) & 0x7FFFF) << 2 | (w >> 29) & 3
+        if imm & (1 << 20):
+            imm -= 1 << 21
+        pc = addr + 4 * i
+        page = (pc & ~0xFFF) + (imm << 12)
+        for j in range(i + 1, min(n, i + 8)):
+            w2 = words[j]
+            if (w2 >> 5) & 31 != rd:
+                continue
+            if w2 & 0xFF800000 == 0x91000000:          # ADD Xd, Xn, #imm{, LSL 12}
+                out.append((pc, page + (((w2 >> 10) & 0xFFF) << (12 * ((w2 >> 22) & 1)))))
+                break
+            if w2 & 0xFFC00000 == 0xF9400000:          # LDR Xt, [Xn, #imm]
+                out.append((pc, page + ((w2 >> 10) & 0xFFF) * 8))
+                break
+            if w2 & 0xFFC00000 == 0x3DC00000:          # LDR Qt, [Xn, #imm]
+                out.append((pc, page + ((w2 >> 10) & 0xFFF) * 16))
+                break
+    return out
+
+
+def code_refs_x86_64(data, start, text):
+    """[(pc, target)] for RIP-relative LEA / MOV / MOVUPS / MOVAPS (disp32, 7-byte forms)."""
+    import re
+    addr, size, fo = text
+    code = data[start + fo:start + fo + size]
+    out = []
+    for m in re.finditer(rb"(?:[\x48\x4c][\x8d\x8b]|\x0f[\x10\x28])[\x05\x0d\x15\x1d\x25\x2d\x35\x3d]", code):
+        i = m.start()
+        disp = int.from_bytes(code[i + 3:i + 7], "little", signed=True)
+        out.append((addr + i, addr + i + 7 + disp))
+    return out
+
+
+def count_keys(data, off, lo, hi, limit=64):
+    n = 0
+    while n < limit and lo <= off + 32 * n and off + 32 * (n + 1) <= hi and is_public_key(data[off + 32 * n:off + 32 * (n + 1)]):
+        n += 1
+    return n
+
+
+def xref_tables(data, cpu, start, end, consts):
+    """What the code that uses the context (or the seed) loads nearby: [(file offset, keys in a row)], plus the sites."""
+    segs, text = macho_segments(data, start)
+    if not text:
+        return [], []
+    say("  reading the %s code for what it loads next to the context..." % cpu)
+    refs = code_refs_arm64(data, start, text) if cpu == "arm64" else code_refs_x86_64(data, start, text)
+    want = {_off_to_vm(segs, start, c) for c in consts} - {None}
+    sites = [pc for pc, t in refs if t in want]
+    seen, tables = set(), []
+    for pc in sites:
+        for pc2, t in refs:
+            if abs(pc2 - pc) > XREF_WINDOW or t in want or t in seen:
+                continue
+            seen.add(t)
+            o = _vm_to_off(segs, start, t)
+            if o is None or not (start <= o < end):
+                continue
+            tables.append((o, count_keys(data, o, start, end), pc2 - pc))
+    tables.sort(key=lambda r: (-r[1], abs(r[2])))
+    return tables, sites
+
+
 def data_hex(report, off):
     return report["_data"][off:off + 32].hex()
 
@@ -321,6 +442,7 @@ def analyse(exe):
             c = s["context"][0]
             excl = [(c, len(ENABLE_ENCRYPTION_CONTEXT))] + [(x, len(ENABLE_ENCRYPTION_SEED)) for x in s["seed"]]
             s["tables"] = key_tables(data, max(start, c - SEARCH_WINDOW), min(end, c + SEARCH_WINDOW), excl)
+        s["xref"], s["sites"] = xref_tables(data, cpu, start, end, s["context"] + s["seed"])
         report["slices"].append(s)
     return data, report
 
@@ -363,11 +485,15 @@ def decide(report, manual=None):
             return None, "%s: EnableEncryptionContext found %d times (needs exactly once)" % (s["cpu"], len(s["context"]))
         if len(s["seed"]) != 1:
             return None, "%s: EnableEncryptionSeed found %d times (needs exactly once)" % (s["cpu"], len(s["seed"]))
-        big = [t for t in s["tables"] if t[1] >= MIN_TABLE_KEYS and t[2]]
+        # the table the code next to the context loads (a run of keys that only sits near it can be anything)
+        if not s.get("sites"):
+            return None, "%s: no code found that uses EnableEncryptionContext" % s["cpu"]
+        big = [t for t in s.get("xref", []) if t[1] >= MIN_TABLE_KEYS and t[0] % 4 == 0]
         if len(big) != 1:
-            return None, "%s: %d separate key tables with %d or more keys near the context (needs exactly one)" % (
+            return None, "%s: the code next to the context loads %d key tables with %d or more keys (needs exactly one)" % (
                 s["cpu"], len(big), MIN_TABLE_KEYS)
-        plan.append((s["cpu"], big[0][0], big[0][1]))
+        # only the entries up to our region group: past the real table, random-looking data can pass as keys too
+        plan.append((s["cpu"], big[0][0], MIN_TABLE_KEYS))
     if not plan:
         return None, "no Mach-O slice found"
     return plan, None
@@ -385,14 +511,9 @@ def print_report(root, app, exe, report):
         say("  EnableEncryptionSeed    at: %s" % (", ".join(hex(x) for x in s["seed"]) or "not found"))
         if s["server_key"]:
             say("  server key already present at: %s" % ", ".join(hex(x) for x in s["server_key"]))
-        for off, n, isolated in s["tables"][:12]:
-            dist = off - s["context"][0] if s["context"] else 0
-            say("  key table at %s: %d keys (%+d bytes from the context)%s" % (
-                hex(off), n, dist, "" if isolated else ", inside noise: ignored"))
-            if isolated:
-                for k in range(min(n, 16)):
-                    o = off + 32 * k
-                    say("      [%2d] %s" % (k, data_hex(report, o)))
+        say("  code that uses the context or seed: %d place(s)" % len(s.get("sites", [])))
+        for off, n, dist in s.get("xref", [])[:16]:
+            say("  loads %s (%+d bytes of code away): %2d key(s) in a row  %s" % (hex(off), dist, n, data_hex(report, off)))
     plan, why = decide(report)
     say("")
     if plan:
@@ -439,7 +560,9 @@ def cmd_scout(args):
     out = os.path.join(HOME, "client-scout.json")
     report.update({"root": root, "app": app, "build": client_build(root), "entitlements": sorted(ent)})
     with open(out, "w") as f:
-        json.dump({k: v for k, v in report.items() if k != "_data"}, f, indent=1)
+        slim = dict(report, slices=[{k: v for k, v in sl.items() if k != "tables"} for sl in report["slices"]])
+        slim.pop("_data", None)
+        json.dump(slim, f, indent=1)
     say("Report: " + out)
 
 
