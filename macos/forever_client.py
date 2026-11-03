@@ -634,6 +634,26 @@ def make_signed_copy(app, dst, dst_exe, extra_entitlements=()):
     return resign_adhoc(app, dst_exe, extra_entitlements)
 
 
+def dyld_selftest(dst_exe, seconds=8):
+    """Launch the copy with DYLD_PRINT_LIBRARIES and count the libraries it logs, then stop it. A long log means
+    macOS honours DYLD_* on the copy (needed to inject the key-setter); the original logged nothing."""
+    log = os.path.join(HOME, "forever-copy-dyld.log")
+    env = dict(os.environ, DYLD_PRINT_LIBRARIES="1")
+    with open(log, "wb") as f:
+        proc = subprocess.Popen([dst_exe], stdout=f, stderr=subprocess.STDOUT, env=env)
+    try:
+        time.sleep(seconds)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(5)
+        except Exception:
+            proc.kill()
+    with open(log, "rb") as f:
+        n = sum(1 for _ in f)
+    return log, n
+
+
 def cmd_prepare(args):
     """Make the signed copy the in-memory key-setter runs against, and confirm macOS honours DYLD_* on it."""
     root = find_client_root(args.client)
@@ -654,11 +674,13 @@ def cmd_prepare(args):
     say("Entitlements on the copy: " + ", ".join(sorted(ent)))
     say("Done. The original app is unchanged (sha256 %s)." % orig_hash[:16])
     say("")
-    dst_exe = os.path.join(dst, os.path.relpath(exe, app))
-    say("Now confirm macOS loads an inserted library into the copy:")
-    say('  DYLD_PRINT_LIBRARIES=1 "%s" >~/Desktop/forever-copy-dyld.log 2>&1 &' % dst_exe)
-    say("  sleep 8; kill %1 2>/dev/null; wc -l <~/Desktop/forever-copy-dyld.log")
-    say("A log with many lines means DYLD_* now works on the copy (it was empty on the original).")
+    say("Checking that macOS now honours DYLD_* on the copy (the original stripped them)...")
+    log, n = dyld_selftest(dst_exe)
+    if n >= 20:
+        say("  OK: %d libraries logged (%s). DYLD_* works on the copy: the in-memory key-setter can be injected." % (n, log))
+    else:
+        say("  Only %d line(s) in %s. The copy did not honour DYLD_* (or did not run far enough)." % (n, log))
+        say("  Send that log so the signing can be adjusted.")
 
 
 def cmd_patch(args):
