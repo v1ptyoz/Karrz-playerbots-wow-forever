@@ -251,11 +251,11 @@ find_client() {
     local r
     for r in "${roots[@]}"; do
         [ -d "$r" ] || continue
-        find "$r" -maxdepth 7 -name .build.info -type f 2>/dev/null | while read -r f; do
+        { find "$r" -maxdepth 7 -name .build.info -type f 2>/dev/null || true; } | while read -r f; do
             d="$(dirname "$f")"
-            is_client_dir "$d" && echo "$d"
+            if is_client_dir "$d"; then echo "$d"; fi
         done
-    done | awk '!seen[$0]++'
+    done | awk '!seen[$0]++' || true
 }
 
 choose_client() {
@@ -268,7 +268,9 @@ choose_client() {
     local found first
     found="$(find_client)"
     # the folder of the right build first
-    first="$(printf '%s\n' "$found" | while read -r d; do [ -n "$d" ] && grep -q "$WOWF_CLIENT_BUILD" "$d/.build.info" 2>/dev/null && echo "$d"; done | head -1)"
+    first="$(printf '%s\n' "$found" | while read -r d; do
+        if [ -n "$d" ] && grep -q "$WOWF_CLIENT_BUILD" "$d/.build.info" 2>/dev/null; then echo "$d"; fi
+    done | head -1 || true)"
     [ -z "$first" ] && first="$(printf '%s\n' "$found" | head -1)"
     if [ -n "$first" ] && ask_yes "Use $first ?"; then
         c="$first"

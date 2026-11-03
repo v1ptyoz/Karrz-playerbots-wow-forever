@@ -106,12 +106,12 @@ map_ids() {
         for f in "$OUTPUT_PATH"/maps/*.tilelist; do
             [[ -e "$f" ]] || continue
             b="$(basename "$f")"; id="${b:0:4}"
-            [[ "$id" =~ ^[0-9]{4}$ ]] && echo $((10#$id))
+            if [[ "$id" =~ ^[0-9]{4}$ ]]; then echo $((10#$id)); fi
         done
         for d in "$OUTPUT_PATH"/vmaps/*/; do
             [[ -d "$d" ]] || continue
             b="$(basename "$d")"
-            [[ "$b" =~ ^[0-9]+$ ]] && echo $((10#$b))
+            if [[ "$b" =~ ^[0-9]+$ ]]; then echo $((10#$b)); fi
         done
     } | sort -n -u
 }
