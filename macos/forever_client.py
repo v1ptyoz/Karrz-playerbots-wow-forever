@@ -308,11 +308,12 @@ XREF_WINDOW = 0x800              # bytes of code around each use of the context 
 
 
 def macho_segments(data, start):
-    """Segments of the thin Mach-O at data[start:]: [(name, vmaddr, vmsize, fileoff, filesize)] and the __text section."""
+    """Thin Mach-O at data[start:]: segments [(name, vmaddr, vmsize, fileoff, filesize)], the code sections
+    [(vmaddr, size, fileoff)] (any section marked as holding instructions) and all sections for the report."""
     if data[start:start + 4] != b"\xcf\xfa\xed\xfe":
-        return [], None
+        return [], [], []
     ncmds = int.from_bytes(data[start + 16:start + 20], "little")
-    off, segs, text = start + 32, [], None
+    off, segs, code, allsect = start + 32, [], [], []
     for _ in range(ncmds):
         cmd = int.from_bytes(data[off:off + 4], "little")
         size = int.from_bytes(data[off + 4:off + 8], "little")
@@ -323,13 +324,19 @@ def macho_segments(data, start):
             nsects = int.from_bytes(data[off + 64:off + 68], "little")
             for k in range(nsects):
                 so = off + 72 + 80 * k
-                if data[so:so + 16].rstrip(b"\0") == b"__text" and data[so + 16:so + 32].rstrip(b"\0") == b"__TEXT":
-                    addr = int.from_bytes(data[so + 32:so + 40], "little")
-                    sz = int.from_bytes(data[so + 40:so + 48], "little")
-                    fo = int.from_bytes(data[so + 48:so + 52], "little")
-                    text = (addr, sz, fo)
+                sect = data[so:so + 16].rstrip(b"\0").decode("ascii", "replace")
+                addr = int.from_bytes(data[so + 32:so + 40], "little")
+                sz = int.from_bytes(data[so + 40:so + 48], "little")
+                fo = int.from_bytes(data[so + 48:so + 52], "little")
+                flags = int.from_bytes(data[so + 64:so + 68], "little")
+                allsect.append((name, sect, addr, sz, fo, flags))
+                if fo and sz and (flags & 0x80000400 or (name, sect) == ("__TEXT", "__text")):
+                    code.append((addr, sz, fo))           # marked as instructions, or the usual code section
+        elif cmd in (0x2C, 0x21):                          # LC_ENCRYPTION_INFO(_64)
+            allsect.append(("LC_ENCRYPTION_INFO", "cryptid=%d" % int.from_bytes(data[off + 16:off + 20], "little"),
+                            0, int.from_bytes(data[off + 12:off + 16], "little"), int.from_bytes(data[off + 8:off + 12], "little"), 0))
         off += size
-    return segs, text
+    return segs, code, allsect
 
 
 def _vm_to_off(segs, start, vm):
@@ -401,19 +408,29 @@ def count_keys(data, off, lo, hi, limit=64):
     return n
 
 
+CONST_WINDOW = 0x400              # code may load a base address and reach the context at an offset from it
+
+
 def xref_tables(data, cpu, start, end, consts):
-    """What the code that uses the context (or the seed) loads nearby: [(file offset, keys in a row)], plus the sites."""
-    segs, text = macho_segments(data, start)
-    if not text:
-        return [], []
-    say("  reading the %s code for what it loads next to the context..." % cpu)
-    refs = code_refs_arm64(data, start, text) if cpu == "arm64" else code_refs_x86_64(data, start, text)
-    want = {_off_to_vm(segs, start, c) for c in consts} - {None}
-    sites = [pc for pc, t in refs if t in want]
+    """What the code that uses the context (or the seed) loads nearby: [(file offset, keys in a row, code distance)],
+    the code places, and the section list (for the report)."""
+    segs, code, allsect = macho_segments(data, start)
+    if not code:
+        return [], [], allsect
+    say("  reading the %s code (%d MB) for what it loads next to the context..." % (cpu, sum(c[1] for c in code) >> 20))
+    refs = []
+    for sect in code:
+        refs += code_refs_arm64(data, start, sect) if cpu == "arm64" else code_refs_x86_64(data, start, sect)
+    want = sorted({_off_to_vm(segs, start, c) for c in consts} - {None})
+    near = lambda t: any(w - CONST_WINDOW <= t <= w + CONST_WINDOW for w in want)
+    sites = sorted({pc for pc, t in refs if near(t)})
     seen, tables = set(), []
+    refs.sort()
+    import bisect
+    pcs = [r[0] for r in refs]
     for pc in sites:
-        for pc2, t in refs:
-            if abs(pc2 - pc) > XREF_WINDOW or t in want or t in seen:
+        for pc2, t in refs[bisect.bisect_left(pcs, pc - XREF_WINDOW):bisect.bisect_right(pcs, pc + XREF_WINDOW)]:
+            if near(t) or t in seen:
                 continue
             seen.add(t)
             o = _vm_to_off(segs, start, t)
@@ -421,7 +438,7 @@ def xref_tables(data, cpu, start, end, consts):
                 continue
             tables.append((o, count_keys(data, o, start, end), pc2 - pc))
     tables.sort(key=lambda r: (-r[1], abs(r[2])))
-    return tables, sites
+    return tables, sites, allsect
 
 
 def data_hex(report, off):
@@ -442,7 +459,7 @@ def analyse(exe):
             c = s["context"][0]
             excl = [(c, len(ENABLE_ENCRYPTION_CONTEXT))] + [(x, len(ENABLE_ENCRYPTION_SEED)) for x in s["seed"]]
             s["tables"] = key_tables(data, max(start, c - SEARCH_WINDOW), min(end, c + SEARCH_WINDOW), excl)
-        s["xref"], s["sites"] = xref_tables(data, cpu, start, end, s["context"] + s["seed"])
+        s["xref"], s["sites"], s["sections"] = xref_tables(data, cpu, start, end, s["context"] + s["seed"])
         report["slices"].append(s)
     return data, report
 
@@ -511,7 +528,14 @@ def print_report(root, app, exe, report):
         say("  EnableEncryptionSeed    at: %s" % (", ".join(hex(x) for x in s["seed"]) or "not found"))
         if s["server_key"]:
             say("  server key already present at: %s" % ", ".join(hex(x) for x in s["server_key"]))
-        say("  code that uses the context or seed: %d place(s)" % len(s.get("sites", [])))
+        say("  code that uses the context or seed: %d place(s)%s" % (len(s.get("sites", [])),
+            "" if not s.get("sites") else ": " + ", ".join(hex(x) for x in s["sites"][:8])))
+        if not s.get("sites"):
+            d = report["_data"]
+            say("    Mach-O header: magic %s, %d load commands" % (d[s["start"]:s["start"] + 4].hex(),
+                int.from_bytes(d[s["start"] + 16:s["start"] + 20], "little")))
+            for seg, sect, addr, sz, fo, flags in s.get("sections", []):
+                say("    section %-16s %-24s vm %#x size %#x file %#x flags %#x" % (seg, sect, addr, sz, fo, flags))
         for off, n, dist in s.get("xref", [])[:16]:
             say("  loads %s (%+d bytes of code away): %2d key(s) in a row  %s" % (hex(off), dist, n, data_hex(report, off)))
     plan, why = decide(report)
