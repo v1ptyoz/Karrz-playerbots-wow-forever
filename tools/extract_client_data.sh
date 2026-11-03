@@ -35,7 +35,7 @@ MAPS_ONLY=0
 RESUME=0
 THREADS=0
 LOCALE="enUS"
-PRODUCT=""
+PRODUCT="${WOWF_PRODUCT:-}"
 
 die() {
     printf '\nERROR: %s\n' "$*" >&2
@@ -180,6 +180,12 @@ else
     [[ $MAPS_ONLY -eq 1 ]] && e_flag=3
     "$TOOLS_PATH/mapextractor" -i "$CLIENT_PATH" -o "$OUTPUT_PATH" -e "$e_flag" -f 1 -l "$LOCALE" -p "$PRODUCT" \
         || die "mapextractor failed (exit $?). Check the output above; usual culprits: CASC init failure, wrong client path."
+    # mapextractor exits 0 even when it could not open the game data: check that it wrote something
+    if [[ -z "$(ls -A "$OUTPUT_PATH/dbc" 2>/dev/null)" || -z "$(ls -A "$OUTPUT_PATH/maps" 2>/dev/null)" ]]; then
+        die "mapextractor wrote no dbc/ or maps/ (product '$PRODUCT'). The products in .build.info:
+$(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,"!"); if(a[1]=="Product")p=i; if(a[1]=="Active")ac=i}; next} p{print "  " $p "  (active " (ac?$ac:"?") ")"}' "$CLIENT_PATH/.build.info" 2>/dev/null)
+Run again with --product <name> (macos/install.sh passes WOWF_PRODUCT=<name> on)."
+    fi
     set_done maps
 fi
 
