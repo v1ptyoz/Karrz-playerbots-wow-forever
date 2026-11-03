@@ -79,34 +79,51 @@ Backups go to `~/WoWForever/backups/<date>/`.
 
 ## The game client on a Mac
 
-The WoW Forever game from Battle.net also comes as a macOS app (build **1.60.1.70707**). `sql/custom/auth/2026_11_02_00_auth_classic_70707.sql` teaches the server
-that build and moves the realms to it (a realm accepts only its own build).
-Play with it from the menu (**P**) or:
+The WoW Forever game from Battle.net also comes as a macOS app (build **1.60.1.70707**).
+`sql/custom/auth/2026_11_02_00_auth_classic_70707.sql` teaches the server that build and moves the realms to it (a realm
+accepts only its own build). Play with it from the menu (**P**) or:
 
 ```bash
-~/Karrz-playerbots-wow-forever/macos/wowforever.sh play
+~/WoWForever/app/macos/wowforever.sh play
 ```
 
-What it does (`macos/forever_client.py`), and why nothing of the official client changes:
+How it works (`macos/forever_client.py` + `macos/forever_inject.c`), and why nothing of the official client changes:
 
-- The server signs one packet (SMSG_ENTER_ENCRYPTED_MODE, Ed25519) that the client checks with a key built into the
-  game program. ForeverLauncher swaps that key on Windows; on the Mac the first `play` makes an **APFS clone** of the app,
-  `<app> (Forever).app`, next to the original (no extra disk space), and replaces the key **only in the clone**, then signs
-  the clone for this Mac (ad-hoc). The original app is never written to; its SHA-256 is checked before and after.
-- The key is only replaced when it is found without doubt (exactly one separate table of Ed25519 public keys right next
-  to the server's `EnableEncryptionContext` constant, in every part of the program). Otherwise nothing is changed and
-  `wowforever.sh client scout` writes a report (`~/WoWForever/client-scout.json`, read only) to send us.
-- While you play here, `WTF/Config.wtf` (with `SET portal "trinity.actual.battle.net"`) and `Cache` are Forever's own
-  copies; when the game quits the official ones are back in place, so Battle.net and the official realms see exactly
-  what they saw before. After a crash or power cut: `wowforever.sh client restore`.
-- When Battle.net updates the game, the next `play` notices it and patches the new version.
-- `wowforever.sh client remove` deletes the clone and Forever's settings; `client status` shows what is there.
+- The server signs one packet (SMSG_ENTER_ENCRYPTED_MODE, Ed25519) that the client checks against the public key of the
+  server's region group (8). On Windows/Linux advocaite's ForeverLauncher sets that key in the running client; on the Mac
+  `play` does the same, in memory:
+  1. **prepare** makes an **APFS clone** of the app next to the original, `<app> (Forever).app` (no extra disk space), and
+     re-signs the clone's program ad-hoc (without the hardened runtime) so a small helper can load. The original app and
+     its signature are never touched.
+  2. On launch the helper (`forever_inject.c`) loads into the clone (DYLD_INSERT_LIBRARIES) and waits until the client
+     builds its region-key store while connecting to the realm, then writes the server's public key into the region-group
+     entry. It finds the store the same way the launcher does (12 entries of 40 bytes, ids 1..12, the flag pattern, each a
+     real key) and only then writes those 32 bytes, through fault-safe `mach_vm_*` calls. No code and no file on disk change.
+  3. While you play, `WTF/Config.wtf` (with `SET portal "trinity.actual.battle.net"`) and `Cache` are Forever's own copies;
+     the official ones are back when the game quits, so Battle.net and the official realms see exactly what they saw before.
+     After a crash or power cut: `wowforever.sh client restore`.
+- Log in with `<name>@local`, realm Trinity, then type `/fb` in game. The helper writes `~/WoWForever/forever-inject.log`.
+- Diagnostics and upkeep: `client probe` (read only, reports whether the store was found), `client prepare` (just makes the
+  signed clone), `client remove` (deletes the clone and Forever's settings), `client status`. When Battle.net updates the
+  game, the next `play` re-prepares the clone automatically.
 
-Not verified yet: that build 70707 speaks the same protocol as 70450 (every update since did, see advocaite's commits for
-70532 to 70658), and that the game accepts running from an ad-hoc signed copy. If the login stops after the realm list,
-send `Server.log` and the scout report.
+Windows and Linux players (another PC in your network) use advocaite's ForeverLauncher.
 
-Windows players (another PC in your network) still use advocaite's ForeverLauncher.
+## First start and turning bots off
+
+The first start builds the world-bot roster and seeds the auction house, which can take several minutes (the console
+shows `still starting ... AHBot sold ...`). That is normal. To start fast, or to look around solo first, create
+`~/WoWForever/server/etc/worldserver.conf.d/zz-9-local.conf` with:
+
+```ini
+[worldserver]
+Playerbot.World.Enable = 0
+AuctionHouseBot.Seller.Enabled = 0
+AuctionHouseBot.Buyer.Enabled = 0
+```
+
+and restart (`wowforever.sh stop && wowforever.sh start`). Your own party bots (`/fb` in game) still work; this only
+turns off the ambient world bots and the auction-house bot. Delete the file to get them back.
 
 ## Playing from another computer
 
