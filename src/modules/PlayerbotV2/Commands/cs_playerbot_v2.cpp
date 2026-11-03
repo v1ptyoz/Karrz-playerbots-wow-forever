@@ -4526,7 +4526,7 @@ public:
             handler->SendSysMessage("  .playerbot meta nearest road");
             handler->SendSysMessage("  .playerbot meta status");
             handler->SendSysMessage("After annotation, regen mmaps (worldserver stopped):");
-            handler->SendSysMessage("  mmaps_generator.exe <mapId> --input <DataDir> --output <DataDir>");
+            handler->SendSysMessage("  mmaps_generator <mapId> --input <DataDir> --output <DataDir>");
             return true;
         }
 

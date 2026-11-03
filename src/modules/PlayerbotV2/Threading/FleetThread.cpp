@@ -12,7 +12,7 @@ void FleetThread::start()
     bool expected = false;
     if (!running_.compare_exchange_strong(expected, true)) return;
     stop_requested_.store(false, std::memory_order_release);
-    thr_ = std::thread(&FleetThread::run, this);
+    thr_ = Trinity::LargeStackThread(&FleetThread::run, this);
 }
 
 void FleetThread::stop()

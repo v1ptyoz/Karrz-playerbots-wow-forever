@@ -1,0 +1,4 @@
+# macOS scripts must keep LF line endings
+*.sh text eol=lf
+*.command text eol=lf
+macos/UPSTREAM text eol=lf

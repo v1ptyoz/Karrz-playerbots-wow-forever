@@ -6,7 +6,7 @@ This is the bot system for advocaite's TrinityCore `forever` tree (this branch i
 one click, raid / dungeon / battleground bots, an optional ambient population of bots around
 real players, and a vanilla-style auction house bot. Take what is useful.
 
-Base: `advocaite/TrinityCore` branch `forever` at `440d365e`. With `-DBUILD_PLAYERBOT_V2=0` (the default) the module is not built.
+Base: `advocaite/TrinityCore` branch `forever` at `367ac384` (`macos/UPSTREAM`). With `-DBUILD_PLAYERBOT_V2=0` (the default) the module is not built.
 
 ## What is in it
 

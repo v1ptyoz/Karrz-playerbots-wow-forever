@@ -1,0 +1,120 @@
+name: macOS build and release
+
+# Builds the server on a real Mac (Apple Silicon), runs the unit tests and packs the ready-made download
+# (macos/package.sh). A pushed tag v* (or a manual run with "release" set) also publishes it as a GitHub release; every other run keeps the
+# download as a workflow artifact for 14 days.
+
+on:
+  push:
+    branches: ['main', 'master', 'claude/**']
+    tags: ['v*']
+    paths-ignore: ['**.md', 'docs/**', 'doc/**', 'v2/**', 'repack/**']
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: 'Build and run the unit tests'
+        type: boolean
+        default: true
+      runner:
+        description: 'GitHub macOS runner (macos-26, macos-15, macos-14); macOS arm64 runners are often short'
+        type: string
+        default: 'macos-26'
+      release:
+        description: 'Publish as a release with this tag (e.g. v0.1.14-mac1); the tag is created on this commit. Empty: artifact only'
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 360
+    env:
+      WOWF_HOME: ${{ github.workspace }}/../wowf
+      CCACHE_DIR: ${{ github.workspace }}/../ccache
+      CCACHE_MAXSIZE: 3G
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      CCACHE_COMPILERCHECK: content
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Version
+      id: v
+      run: |
+        if [ -n "${{ inputs.release }}" ]; then v="${{ inputs.release }}"
+        elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-$(git rev-parse --short HEAD)"; fi
+        echo "version=$v" >> "$GITHUB_OUTPUT"
+        if [ -n "${{ inputs.release }}" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then echo "publish=1" >> "$GITHUB_OUTPUT"; fi
+        echo "Version $v, $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, macOS $(sw_vers -productVersion)"
+
+    - name: Free disk space
+      # the runner has little free disk; the build needs ~25 GB. Drop what this job never uses.
+      run: |
+        df -h / | tail -1
+        sel="$(xcode-select -p | sed 's#/Contents/Developer$##')"
+        for x in /Applications/Xcode*.app; do
+          [ "$x" = "$sel" ] || [ "$(readlink "$x" 2>/dev/null)" = "$sel" ] || sudo rm -rf "$x" &
+        done
+        xcrun simctl runtime delete all >/dev/null 2>&1 || true
+        sudo rm -rf ~/Library/Developer/CoreSimulator /Library/Developer/CoreSimulator/Profiles/Runtimes \
+          ~/Library/Android /usr/local/share/dotnet ~/.dotnet /usr/local/lib/node_modules ~/.rustup ~/.cargo \
+          /opt/hostedtoolcache/CodeQL /Users/runner/hostedtoolcache/CodeQL 2>/dev/null || true
+        wait
+        df -h / | tail -1
+
+    - name: Compiler cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ github.workspace }}/../ccache
+        key: ccache-${{ inputs.runner || 'macos-26' }}-${{ hashFiles('macos/UPSTREAM') }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ inputs.runner || 'macos-26' }}-${{ hashFiles('macos/UPSTREAM') }}-
+          ccache-${{ inputs.runner || 'macos-26' }}-
+
+    - name: Build (macos/build.sh)
+      run: |
+        tests=""
+        if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ inputs.tests }}" = "true" ]; then tests="--tests"; fi
+        macos/build.sh --from-source --type Release --jobs 3 $tests
+        ccache -s || true
+        df -h / | tail -1
+
+    - name: Smoke test
+      run: |
+        "$WOWF_HOME/server/bin/worldserver" --version
+        "$WOWF_HOME/server/bin/bnetserver" --version
+        ls "$WOWF_HOME/server/etc/worldserver.conf.d"
+
+    - name: Package (macos/package.sh)
+      timeout-minutes: 30
+      run: macos/package.sh --version "${{ steps.v.outputs.version }}" --out dist --repo "${{ github.repository }}"
+
+    - name: Keep the download
+      uses: actions/upload-artifact@v7
+      with:
+        name: WoW-Forever-Bots-macOS-arm64-${{ steps.v.outputs.version }}
+        path: dist/*
+        retention-days: 14
+
+    - name: Publish the release
+      if: steps.v.outputs.publish == '1'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        notes=macos/RELEASE-NOTES.md
+        tag="${{ steps.v.outputs.version }}"
+        gh release create "$tag" dist/* --repo "${{ github.repository }}" --target "${GITHUB_SHA}" \
+          --title "WoW Forever Bots for macOS $tag" --notes-file "$notes" \
+          || gh release upload "$tag" dist/* --repo "${{ github.repository }}" --clobber

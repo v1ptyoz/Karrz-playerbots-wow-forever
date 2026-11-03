@@ -3561,7 +3561,7 @@ void Module::SendDueAddonHints()
         Player* p = ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guid));
         if (!p || !p->IsInWorld() || !p->GetSession() || p->GetSession()->IsBot())
             continue;
-        ChatHandler(p->GetSession()).PSendSysMessage("WoW Forever Bots add-on (buttons for your bots, Raid ready): %s - unzip it into Interface\\AddOns and type /reload.",
+        ChatHandler(p->GetSession()).PSendSysMessage("WoW Forever Bots add-on (buttons for your bots, Raid ready): %s - unzip it into _forever_/Interface/AddOns and type /reload.",
             Services::Config().addon_hint_url().c_str());
         TC_LOG_INFO("playerbot.v2", "[addon_hint] {} has no ForeverBots add-on: link sent", p->GetName());
     }

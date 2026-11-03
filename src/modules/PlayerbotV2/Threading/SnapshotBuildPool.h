@@ -42,6 +42,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include "LargeStackThread.h"   // 8 MB stack on macOS too (std::thread gets 512 KB there)
 #include <vector>
 
 namespace Playerbot {
@@ -94,7 +95,7 @@ private:
     void run_task(Task& task);
 
     std::size_t                          desired_count_ = 0;
-    std::vector<std::thread>             workers_;
+    std::vector<Trinity::LargeStackThread> workers_;
     std::vector<std::unique_ptr<Lane>>   lanes_;       // one per worker
     std::mutex                           done_mtx_;
     std::condition_variable              cv_work_;      // workers wait for tasks
