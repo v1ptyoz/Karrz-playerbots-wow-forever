@@ -44,6 +44,7 @@ world_console() {   # world_console "command": types a command into the worldser
 loop_cmd() {   # loop_cmd <name> <program and args...>
     local name="$1"; shift
     cat <<EOF
+sleep 1   # lets tmux pipe-pane attach first, so the console log has everything
 cd "$WOWF_BIN" || exit 1
 ulimit -n 10240 2>/dev/null || ulimit -n 4096 2>/dev/null || true
 while true; do
@@ -99,13 +100,22 @@ cmd_start() {
         tmux_window bnet && tmux kill-window -t "$WOWF_TMUX_SESSION:bnet"
         tmux new-window -d -t "$WOWF_TMUX_SESSION" -n bnet "bash \"$brun\""
     fi
+    # everything the programs print (also what happens before their own logs open: missing libraries, config errors)
+    local w
+    for w in world bnet; do
+        tmux pipe-pane -o -t "$WOWF_TMUX_SESSION:$w" "cat >> '$WOWF_LOGS/$w-console.log'" 2>/dev/null || true
+    done
     info "Starting worldserver (the first start imports the world database and makes the bot roster: that can take long)"
     sleep 2
     if wait_world_ready "$log_size"; then
         ok "Server ready. Log in with <name>@local, realm Trinity."
         [ -f "$AUTORESTART_FLAG" ] && say "Auto-restart is on."
     else
-        world_running || { warn "worldserver stopped. Last lines of Server.log:"; tail -n 25 "$WOWF_LOGS/Server.log" 2>/dev/null || true; return 1; }
+        if ! world_running; then
+            warn "worldserver stopped. Last lines of Server.log:"; tail -n 25 "$WOWF_LOGS/Server.log" 2>/dev/null || true
+            warn "Last lines of its console ($WOWF_LOGS/world-console.log):"; tail -n 25 "$WOWF_LOGS/world-console.log" 2>/dev/null || true
+            return 1
+        fi
         warn "worldserver is still starting; look with: macos/wowforever.sh console"
     fi
     bnet_running || warn "bnetserver is not running: see $WOWF_LOGS/Bnet.log (often the hosts line or the certificate)."
