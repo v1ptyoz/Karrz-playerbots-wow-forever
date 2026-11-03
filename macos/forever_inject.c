@@ -141,6 +141,22 @@ static void locate(void) {
     lg("sites: %d", sites);
 }
 
+// dump a plain vmaddr range (runtime = vmaddr + slide) in full, 32 bytes a line: used to bring a clean window of the
+// key-table region out for off-line analysis. Reads only.
+static void dump_range(uint64_t vmaddr, uint64_t len) {
+    uint64_t va = vmaddr + (uint64_t)g_slide;
+    lg("range vmaddr %#llx runtime %#llx len %#llx", (unsigned long long)vmaddr, (unsigned long long)va,
+       (unsigned long long)len);
+    if (!mapped(va, len)) { lg("range not mapped"); return; }
+    const uint8_t *p = (const uint8_t *)va;
+    for (uint64_t o = 0; o < len; o += 32) {
+        char line[160]; int c = 0;
+        c += snprintf(line + c, sizeof line - c, "r %#llx ", (unsigned long long)(vmaddr + o));
+        for (int k = 0; k < 32 && o + k < len; k++) c += snprintf(line + c, sizeof line - c, "%02x", p[o + k]);
+        lg("%s", line);
+    }
+}
+
 static void *worker(void *arg) {
     (void)arg;
     const char *path = getenv("FOREVER_LOG");
@@ -160,10 +176,20 @@ static void *worker(void *arg) {
         }
     }
     if (!g_hdr) { lg("no MH_EXECUTE image found"); return NULL; }
+    const char *dump_spec = getenv("FOREVER_DUMP");   // "0xVMADDR:0xLEN": bring a clean data window out for analysis
     // the protector decrypts the code during startup; try a few times while it comes up
     for (int attempt = 1; attempt <= 6; attempt++) {
         lg("--- attempt %d (%d s) ---", attempt, attempt * 5);
         sleep(5);
+        if (dump_spec) {
+            uint64_t vm = 0, len = 0;
+            if (sscanf(dump_spec, "%llx:%llx", (unsigned long long *)&vm, (unsigned long long *)&len) == 2 && len) {
+                dump_range(vm, len);
+                break;
+            }
+            lg("bad FOREVER_DUMP=%s (want 0xVMADDR:0xLEN)", dump_spec);
+            break;
+        }
         locate();
     }
     lg("done");

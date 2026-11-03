@@ -700,7 +700,7 @@ def build_inject():
     return dylib
 
 
-def run_injected(dst_exe, dylib, seconds, mode):
+def run_injected(dst_exe, dylib, seconds, mode, dump=None):
     """Launch the copy with the module inserted, let it work, then stop it. Returns the module's log path."""
     log = os.path.join(HOME, "forever-inject.log")
     try:
@@ -708,6 +708,8 @@ def run_injected(dst_exe, dylib, seconds, mode):
     except OSError:
         pass
     env = dict(os.environ, DYLD_INSERT_LIBRARIES=dylib, FOREVER_LOG=log, FOREVER_MODE=mode)
+    if dump:
+        env["FOREVER_DUMP"] = dump
     say("Launching the copy with the module (%d s)..." % seconds)
     proc = subprocess.Popen([dst_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     try:
@@ -731,7 +733,7 @@ def cmd_probe(args):
     if not os.path.isdir(dst) or not os.path.isfile(os.path.join(dst, "Contents", "forever-prepare.json")):
         fail("Run 'client prepare' first (it makes the signed copy).")
     dylib = build_inject()
-    log = run_injected(dst_exe, dylib, args.seconds or 40, "locate")
+    log = run_injected(dst_exe, dylib, args.seconds or 40, "locate", getattr(args, "dump", None))
     say("")
     if os.path.isfile(log):
         with open(log) as f:
@@ -972,6 +974,7 @@ def main():
                     help="patch: the key table by hand (from a reviewed scout report), once per part (x86_64, arm64)")
     ap.add_argument("--expect-sha256", help="patch with --table: the program's sha256 from the scout report")
     ap.add_argument("--seconds", type=int, help="probe: how long to let the game run before reading memory")
+    ap.add_argument("--dump", help="probe: dump a raw vmaddr window instead of searching, as 0xVMADDR:0xLEN")
     args = ap.parse_args()
     if sys.platform != "darwin" and args.command != "scout":
         fail("This is for macOS.")
