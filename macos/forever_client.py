@@ -30,6 +30,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 # --- the server's side (src/server/game/Server/Packets/AuthenticationPackets.cpp) ------------------------------------
@@ -606,8 +607,17 @@ def resign_adhoc(app, dst_exe, extra_entitlements=()):
     os.makedirs(HOME, exist_ok=True)
     with open(ent_file, "wb") as f:
         plistlib.dump(ent, f)
-    run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, dst_exe])
-    run(["codesign", "--verify", "--strict", dst_exe])
+    # sign the program as a lone file: inside Contents/MacOS, codesign recurses into the data files beside it
+    # (icudt*.dat, not signable) and fails. The signature lives inside the Mach-O, so it survives the move back.
+    tmpdir = tempfile.mkdtemp()
+    try:
+        tmp = os.path.join(tmpdir, "program")
+        shutil.copy2(dst_exe, tmp)
+        run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, tmp])
+        run(["codesign", "--verify", "--strict", tmp])
+        shutil.copy2(tmp, dst_exe)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
     return ent
 
 
