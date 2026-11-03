@@ -125,19 +125,19 @@ if command -v brew >/dev/null 2>&1; then
     if [ -n "$BREW_ADDED" ]; then
         pk="$BREW_ADDED"; say "Installed by this project: $pk"; def=y
     else
-        pk="openssl@3 mysql tmux sevenzip"
+        pk="openssl@3 $WOWF_MYSQL tmux sevenzip"
         say "Not recorded which packages this project installed. Usual ones: $pk"
         say "(other programs may use them too; openssl@3 is kept, it is needed by much of Homebrew)"
-        pk="mysql tmux sevenzip"; def=n
+        pk="$WOWF_MYSQL tmux sevenzip"; def=n
     fi
     if sure "Uninstall: $pk?" $def; then
-        case " $pk " in *" mysql "*)
-            brew services stop mysql >/dev/null 2>&1 || true ;;
+        case " $pk " in *" mysql"*)
+            brew services stop "$WOWF_MYSQL" >/dev/null 2>&1 || true ;;
         esac
         # shellcheck disable=SC2086
         for p in $pk; do brew list --formula "$p" >/dev/null 2>&1 && brew uninstall --ignore-dependencies "$p" || true; done
         brew autoremove || true
-        case " $pk " in *" mysql "*)
+        case " $pk " in *" mysql"*)
             d="$(brew --prefix)/var/mysql"
             if [ -d "$d" ] && sure "Also delete MySQL's data folder $d (all MySQL databases on this Mac)?" n; then
                 rm -rf "$d"; ok "Removed $d"

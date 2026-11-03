@@ -155,6 +155,11 @@ setup_databases() {
             mysql_admin -e "GRANT ALL PRIVILEGES ON \`$db\`.* TO 'trinity'@'$h';"
         done
     done
+    # the world database release holds views/routines with a DEFINER: MySQL 8.2+ wants these rights for that
+    for h in localhost 127.0.0.1; do
+        mysql_admin -e "GRANT SET_ANY_DEFINER, ALLOW_NONEXISTENT_DEFINER, SYSTEM_USER ON *.* TO 'trinity'@'$h';" 2>/dev/null || true
+    done
+    mysql_admin -e "SET PERSIST log_bin_trust_function_creators = 1;" 2>/dev/null || true
     mysql_admin -e "FLUSH PRIVILEGES;"
     mysql_game -e "SELECT 1" >/dev/null || die "The database user trinity cannot log in."
     ok "MySQL user trinity; databases auth, characters, world, hotfixes, playerbot"

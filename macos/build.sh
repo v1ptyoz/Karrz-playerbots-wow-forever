@@ -12,7 +12,7 @@
 #   macos/build.sh --from-source   compile even when this is a release download with a ready-made server (prebuilt/)
 #
 # In a release download (prebuilt/server exists) it only installs the ready-made server: no Xcode compile, no cmake,
-# just the few Homebrew packages the server needs at run time (mysql, openssl, tmux, 7-Zip).
+# just the few Homebrew packages the server needs at run time (mysql@8.4, openssl, tmux, 7-Zip).
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -62,9 +62,9 @@ if [ $FROM_SOURCE -eq 0 ] && [ -x "$PREBUILT/server/bin/worldserver" ]; then
 fi
 
 if [ $USE_PREBUILT -eq 1 ]; then
-    BREW_PACKAGES="openssl@3 mysql tmux sevenzip"
+    BREW_PACKAGES="openssl@3 $WOWF_MYSQL tmux sevenzip"
 else
-    BREW_PACKAGES="git cmake ninja ccache boost openssl@3 mysql readline bzip2 zlib tmux sevenzip"
+    BREW_PACKAGES="git cmake ninja ccache boost openssl@3 $WOWF_MYSQL readline bzip2 zlib tmux sevenzip"
 fi
 if [ $SKIP_DEPS -eq 0 ]; then
     missing=""
@@ -149,7 +149,7 @@ cmake -S "$WOWF_SRC" -B "$WOWF_BUILD" -G Ninja \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DSERVERS=1 -DTOOLS=1 -DSCRIPTS=static -DBUILD_PLAYERBOT_V2=1 -DBUILD_TESTING="$TESTS" -DWITH_WARNINGS=0 \
     -DOPENSSL_ROOT_DIR="$BP/opt/openssl@3" \
-    -DMYSQL_ROOT_DIR="$BP/opt/mysql" \
+    -DMYSQL_ROOT_DIR="$BP/opt/$WOWF_MYSQL" \
     -DREADLINE_ROOT_DIR="$BP/opt/readline" \
     -DBoost_ROOT="$BP/opt/boost" \
     -DCMAKE_EXE_LINKER_FLAGS="-Wl,-headerpad_max_install_names" \

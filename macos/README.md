@@ -13,7 +13,7 @@ the add-on, and a menu with Start, Shut down, Auto-restart, Update, Create accou
 - An internet connection for the first install (Homebrew packages, the core source, the world database).
 
 Nothing else: the scripts install the Xcode Command Line Tools and Homebrew if they are missing, and then
-`cmake ninja ccache boost openssl@3 mysql readline bzip2 zlib tmux sevenzip` with Homebrew.
+`cmake ninja ccache boost openssl@3 mysql@8.4 readline bzip2 zlib tmux sevenzip` with Homebrew.
 
 ## Install
 

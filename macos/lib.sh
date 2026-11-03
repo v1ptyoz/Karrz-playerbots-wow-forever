@@ -37,6 +37,8 @@ WOWF_TDB_FILES="TDB_full_world_forever_2026_10_14.sql TDB_full_hotfixes_forever_
 WOWF_DISCORD="https://discord.gg/Jk596N3xun"
 WOWF_LOGIN_HOST="trinity.actual.battle.net"
 WOWF_CLIENT_BUILD="70707"
+# MySQL 8.4 LTS: MySQL 9 dropped MD5(), which the core's SQL updates use
+WOWF_MYSQL="mysql@8.4"
 
 # --- output -------------------------------------------------------------------------------------------------------
 if [ -t 1 ]; then
@@ -85,7 +87,7 @@ load_brew_env() {
     bp="$(brew_prefix 2>/dev/null)" || return 1
     eval "$("$bp/bin/brew" shellenv)"
     # keg-only formulas the build and the scripts use
-    export PATH="$bp/opt/mysql/bin:$bp/opt/openssl@3/bin:$PATH"
+    export PATH="$bp/opt/$WOWF_MYSQL/bin:$bp/opt/openssl@3/bin:$PATH"
 }
 
 ncpu() { sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4; }
@@ -168,14 +170,26 @@ mysql_game()  { mysql -h127.0.0.1 -P3306 -utrinity -p"$WOWF_DB_PASS" "$@" 2>/dev
 mysql_running() { mysqladmin -uroot ping >/dev/null 2>&1; }
 
 ensure_mysql() {
-    if mysql_running; then return 0; fi
-    info "Starting MySQL (brew services start mysql)"
-    brew services start mysql >/dev/null || true
-    local i
-    for i in $(seq 1 60); do
-        mysql_running && return 0
-        sleep 1
-    done
+    local i v
+    if ! mysql_running; then
+        info "Starting MySQL (brew services start $WOWF_MYSQL)"
+        brew services start "$WOWF_MYSQL" >/dev/null || true
+        for i in $(seq 1 60); do
+            mysql_running && break
+            sleep 1
+        done
+    fi
+    if mysql_running; then
+        v="$(mysql -uroot -N -e 'SELECT VERSION()' 2>/dev/null || true)"
+        case "$v" in 9.*)
+            die "MySQL $v runs, the server needs MySQL 8.4 (MySQL 9 has no MD5(), the database updates use it).
+Switch (this deletes all MySQL databases on this Mac):
+  brew services stop mysql; brew uninstall mysql; rm -rf \"$(brew --prefix)/var/mysql\"
+  brew install $WOWF_MYSQL; brew services start $WOWF_MYSQL
+then run macos/install.sh again." ;;
+        esac
+        return 0
+    fi
     die "MySQL does not answer. Check: brew services list; tail \"$(brew --prefix)/var/mysql/\"*.err"
 }
 
