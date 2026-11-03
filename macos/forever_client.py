@@ -695,12 +695,12 @@ def build_inject():
     os.makedirs(HOME, exist_ok=True)
     say("Building the module (clang)...")
     run(["clang", "-std=c11", "-O2", "-dynamiclib", "-arch", "arm64", "-D_GNU_SOURCE",
-         "-framework", "Foundation", src, "-o", dylib])
+         src, "-o", dylib])
     run(["codesign", "--force", "--sign", "-", dylib])
     return dylib
 
 
-def run_injected(dst_exe, dylib, seconds, mode, dump=None):
+def run_injected(dst_exe, dylib, seconds, mode, dump=None, args_env=None):
     """Launch the copy with the module inserted, let it work, then stop it. Returns the module's log path."""
     log = os.path.join(HOME, "forever-inject.log")
     try:
@@ -708,8 +708,10 @@ def run_injected(dst_exe, dylib, seconds, mode, dump=None):
     except OSError:
         pass
     env = dict(os.environ, DYLD_INSERT_LIBRARIES=dylib, FOREVER_LOG=log, FOREVER_MODE=mode)
-    if dump:
-        env["FOREVER_DUMP"] = dump
+    if getattr(args_env, "region_group", None):
+        env["FOREVER_REGION_GROUP"] = str(args_env.region_group)
+    if getattr(args_env, "public_key", None):
+        env["FOREVER_PUBKEY"] = args_env.public_key
     say("Launching the copy with the module (%d s)..." % seconds)
     proc = subprocess.Popen([dst_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     try:
@@ -724,26 +726,23 @@ def run_injected(dst_exe, dylib, seconds, mode, dump=None):
 
 
 def cmd_probe(args):
-    """Build and inject the locator, then show what the code loads next to the context (reads memory, changes nothing)."""
+    """Dry run: inject the key-setter in locate mode and report whether the region-key store was found. Reads only."""
     root = find_client_root(args.client)
     app = find_original_app(flavor_dir(root))
     exe = app_executable(app)
     dst = copy_path(app)
     dst_exe = os.path.join(dst, os.path.relpath(exe, app))
-    if not os.path.isdir(dst) or not os.path.isfile(os.path.join(dst, "Contents", "forever-prepare.json")):
+    if not os.path.isfile(os.path.join(dst, "Contents", "forever-prepare.json")):
         fail("Run 'client prepare' first (it makes the signed copy).")
     dylib = build_inject()
-    mode = "verify" if getattr(args, "verify", False) else "locate"
-    log = run_injected(dst_exe, dylib, args.seconds or 40, mode, getattr(args, "dump", None))
+    say("The store appears only after you reach the realm list. Log in during this window.")
+    log = run_injected(dst_exe, dylib, args.seconds or 120, "locate", args_env=args)
     say("")
     if os.path.isfile(log):
-        with open(log) as f:
-            txt = f.read()
-        say(txt)
+        say(open(log).read())
         say("Log: " + log)
     else:
-        say("The module wrote no log (%s). It may not have loaded." % log)
-
+        say("No log at %s; the module may not have loaded." % log)
 
 def cmd_patch(args):
     if SERVER_PUBLIC_KEY != derive_public_key(SERVER_PRIVATE_KEY):
@@ -905,31 +904,40 @@ def cmd_play(args):
     root = find_client_root(args.client)
     flavor = flavor_dir(root)
     app = find_original_app(flavor)
+    exe = app_executable(app)
     dst = copy_path(app)
-    meta = os.path.join(dst, "Contents", "forever-patch.json")
-    if not os.path.isfile(meta):
-        say("First time: making the patched copy of the game (the original stays as it is).")
-        cmd_patch(args)
-    with open(meta) as f:
-        info = json.load(f)
-    if info.get("original_sha256") != sha256_of(app_executable(app)):
-        say("The game was updated since the copy was made: patching the new version first.")
-        args.table, args.expect_sha256 = None, None
-        cmd_patch(args)
+    dst_exe = os.path.join(dst, os.path.relpath(exe, app))
+    orig_hash = sha256_of(exe)
+    prep = os.path.join(dst, "Contents", "forever-prepare.json")
+    need = not os.path.isfile(prep)
+    if not need:
+        try:
+            need = json.load(open(prep)).get("original_sha256") != orig_hash
+        except Exception:
+            need = True
+    if need:
+        say("Preparing the signed copy of the game (the original stays as it is).")
+        cmd_prepare(args)
     if game_running(app) or game_running(dst):
         fail("The game is running: quit it first.")
+    dylib = build_inject()
     if load_state().get("swapped"):
         cmd_restore(args)
     swap_in(flavor)
+    log = os.path.join(HOME, "forever-inject.log")
+    env = dict(os.environ, DYLD_INSERT_LIBRARIES=dylib, FOREVER_LOG=log, FOREVER_MODE="patch")
+    if getattr(args, "region_group", None):
+        env["FOREVER_REGION_GROUP"] = str(args.region_group)
+    if getattr(args, "public_key", None):
+        env["FOREVER_PUBKEY"] = args.public_key
     try:
-        say("Starting %s (portal %s). Your official settings come back when the game quits." % (os.path.basename(dst), PORTAL))
-        subprocess.call(["open", "-W", "-n", dst])
-        time.sleep(2)
-        while game_running(dst):
-            time.sleep(2)
+        say("Starting the game (portal %s). The server key is set in memory once you reach the realm list." % PORTAL)
+        say("Log in with <name>@local, realm Trinity. If the first realm attempt fails, try again without quitting.")
+        proc = subprocess.Popen([dst_exe], env=env)
+        proc.wait()
     finally:
         swap_out(flavor)
-        say("Official settings and cache put back.")
+        say("Official settings and cache put back. Key-setter log: " + log)
 
 
 def cmd_remove(args):
