@@ -76,9 +76,17 @@ static uint64_t adrp_target(const uint32_t *w, uint64_t pc, int n_ahead) {
     return 0;
 }
 
+// a 32-byte block that could be an Ed25519 public key has many distinct bytes; code, text and zero padding do not
+static int key_like(const uint8_t *p) {
+    int seen[256] = {0}, n = 0;
+    for (int i = 0; i < 32; i++) if (!seen[p[i]]++) n++;
+    return n >= 24;
+}
+
 static void dump(const char *tag, uint64_t va, int len) {
-    if (!mapped(va, len)) { lg("  %s %#llx: not mapped", tag, (unsigned long long)va); return; }
+    if (!mapped(va, len)) return;                      // only the key-like windows are logged, to keep it small
     const uint8_t *p = (const uint8_t *)va;
+    if (!key_like(p)) return;
     for (int o = 0; o < len; o += 32) {
         char line[160]; int c = 0;
         c += snprintf(line + c, sizeof line - c, "  %s %#llx ", tag, (unsigned long long)(va + o));
@@ -127,7 +135,7 @@ static void locate(void) {
             uint64_t j = (pc2 - text_vmaddr) / 4;
             uint64_t t2 = adrp_target(w + j, pc2, 7);
             if (!t2 || (t2 >= ctx - CONST_WINDOW && t2 <= ctx + CONST_WINDOW)) continue;
-            dump("loads", t2, 160);
+            dump("loads", t2, 384);
         }
     }
     lg("sites: %d", sites);
