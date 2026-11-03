@@ -590,6 +590,59 @@ def cmd_scout(args):
     say("Report: " + out)
 
 
+# allow-dyld-environment-variables lets the copy honour DYLD_INSERT_LIBRARIES; the key is set in memory, not on disk
+DYLD_ENV_ENTITLEMENT = "com.apple.security.cs.allow-dyld-environment-variables"
+DISABLE_LV_ENTITLEMENT = "com.apple.security.cs.disable-library-validation"
+
+
+def make_signed_copy(app, dst, extra_entitlements=()):
+    """APFS-clone app to dst and re-sign it ad-hoc (no hardened runtime, so dyld honours DYLD_* and loads our module)."""
+    if os.path.exists(dst):
+        say("Removing the old copy")
+        shutil.rmtree(dst)
+    say("Making the copy (APFS clone: takes no extra disk space)")
+    r = run(["cp", "-cR", app, dst], check=False)
+    if r.returncode != 0:
+        run(["ditto", app, dst])
+    run(["xattr", "-dr", "com.apple.quarantine", dst], check=False)
+    ent = {k: v for k, v in entitlements_of(app).items() if k.startswith(ALLOWED_ENTITLEMENT_PREFIXES)}
+    for k in extra_entitlements:
+        ent[k] = True
+    ent_file = os.path.join(HOME, "client-entitlements.plist")
+    os.makedirs(HOME, exist_ok=True)
+    with open(ent_file, "wb") as f:
+        plistlib.dump(ent, f)
+    run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, dst])
+    run(["codesign", "--verify", "--strict", dst])
+    return ent
+
+
+def cmd_prepare(args):
+    """Make the signed copy the in-memory key-setter runs against, and confirm macOS honours DYLD_* on it."""
+    root = find_client_root(args.client)
+    app = find_original_app(flavor_dir(root))
+    exe = app_executable(app)
+    dst = copy_path(app)
+    orig_hash = sha256_of(exe)
+    say("Original : %s" % app)
+    say("Copy     : %s" % dst)
+    ent = make_signed_copy(app, dst, (DYLD_ENV_ENTITLEMENT, DISABLE_LV_ENTITLEMENT))
+    if sha256_of(exe) != orig_hash:
+        fail("The original program changed. Repair the game in Battle.net.")
+    with open(os.path.join(dst, "Contents", "forever-prepare.json"), "w") as f:
+        json.dump({"original_sha256": orig_hash, "build": client_build(root),
+                   "entitlements": sorted(ent), "time": time.strftime("%Y-%m-%d %H:%M:%S")}, f, indent=1)
+    say("")
+    say("Entitlements on the copy: " + ", ".join(sorted(ent)))
+    say("Done. The original app is unchanged (sha256 %s)." % orig_hash[:16])
+    say("")
+    dst_exe = os.path.join(dst, os.path.relpath(exe, app))
+    say("Now confirm macOS loads an inserted library into the copy:")
+    say('  DYLD_PRINT_LIBRARIES=1 "%s" >~/Desktop/forever-copy-dyld.log 2>&1 &' % dst_exe)
+    say("  sleep 8; kill %1 2>/dev/null; wc -l <~/Desktop/forever-copy-dyld.log")
+    say("A log with many lines means DYLD_* now works on the copy (it was empty on the original).")
+
+
 def cmd_patch(args):
     if SERVER_PUBLIC_KEY != derive_public_key(SERVER_PRIVATE_KEY):
         fail("internal: the server key does not match its private key")
@@ -814,7 +867,7 @@ def cmd_status(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("command", choices=["scout", "patch", "play", "restore", "remove", "status"])
+    ap.add_argument("command", choices=["scout", "patch", "prepare", "play", "restore", "remove", "status"])
     ap.add_argument("--client", help="the game folder (holds .build.info and _forever_)")
     ap.add_argument("--table", action="append", metavar="CPU:OFFSET:COUNT",
                     help="patch: the key table by hand (from a reviewed scout report), once per part (x86_64, arm64)")
@@ -822,7 +875,7 @@ def main():
     args = ap.parse_args()
     if sys.platform != "darwin" and args.command != "scout":
         fail("This is for macOS.")
-    {"scout": cmd_scout, "patch": cmd_patch, "play": cmd_play, "restore": cmd_restore,
+    {"scout": cmd_scout, "patch": cmd_patch, "prepare": cmd_prepare, "play": cmd_play, "restore": cmd_restore,
      "remove": cmd_remove, "status": cmd_status}[args.command](args)
 
 
