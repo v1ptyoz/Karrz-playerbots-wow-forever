@@ -138,8 +138,20 @@ static void *worker(void *arg) {
     const char *path = getenv("FOREVER_LOG");
     g_log = path ? fopen(path, "w") : stderr;
     lg("injected into pid %d", getpid());
-    g_hdr = (const struct mach_header_64 *)_dyld_get_image_header(0);
-    g_slide = _dyld_get_image_vmaddr_slide(0);
+    // the main executable (MH_EXECUTE); image 0 with our dylib inserted can be this module itself, which also
+    // carries the context constant, so pick by file type instead of by index
+    uint32_t count = _dyld_image_count();
+    g_hdr = NULL;
+    for (uint32_t i = 0; i < count; i++) {
+        const struct mach_header_64 *h = (const struct mach_header_64 *)_dyld_get_image_header(i);
+        if (h && h->filetype == MH_EXECUTE) {
+            g_hdr = h;
+            g_slide = _dyld_get_image_vmaddr_slide(i);
+            lg("main executable: image %u \"%s\" slide %#lx", i, _dyld_get_image_name(i), (long)g_slide);
+            break;
+        }
+    }
+    if (!g_hdr) { lg("no MH_EXECUTE image found"); return NULL; }
     // the protector decrypts the code during startup; try a few times while it comes up
     for (int attempt = 1; attempt <= 6; attempt++) {
         lg("--- attempt %d (%d s) ---", attempt, attempt * 5);
