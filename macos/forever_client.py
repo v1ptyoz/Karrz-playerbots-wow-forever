@@ -694,7 +694,7 @@ def build_inject():
     dylib = os.path.join(HOME, "forever_inject.dylib")
     os.makedirs(HOME, exist_ok=True)
     say("Building the module (clang)...")
-    run(["clang", "-std=c11", "-O2", "-dynamiclib", "-arch", "arm64", "-D_GNU_SOURCE",
+    run(["clang", "-std=c11", "-O2", "-dynamiclib", "-arch", "arm64", "-arch", "x86_64", "-D_GNU_SOURCE",
          src, "-o", dylib])
     run(["codesign", "--force", "--sign", "-", dylib])
     return dylib

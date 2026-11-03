@@ -56,10 +56,24 @@ static int hex2bin(const char *h, uint8_t *out, int n) {
     return 1;
 }
 
-// the store is valid if entry e begins with little-endian id e+1, for all 12 entries
+// expected per-entry flag (byte at +36): 1 for all, 0 for the 9th (index 8). Same pattern as the Windows/Linux launcher.
+static const uint8_t EXPECTED_FLAGS[ENTRY_COUNT] = {1,1,1,1,1,1,1,1,0,1,1,1};
+
+static int key_like(const uint8_t *p) {           // a real 32-byte key has many distinct bytes; ids/padding do not
+    int seen[256] = {0}, n = 0;
+    for (int i = 0; i < 32; i++) if (!seen[p[i]]++) n++;
+    return n >= 24;
+}
+
+// A valid store: 12 entries, each [u32 id e+1][32-byte key-like value][flag matching the pattern]. Strong enough to
+// write safely (a stray 1..12 integer array elsewhere will not also carry 12 key-like blocks with this flag pattern).
 static int is_store(const uint8_t *p) {
-    for (int e = 0; e < ENTRY_COUNT; e++)
-        if (*(const uint32_t *)(p + e * ENTRY_SIZE) != (uint32_t)(e + 1)) return 0;
+    for (int e = 0; e < ENTRY_COUNT; e++) {
+        const uint8_t *q = p + e * ENTRY_SIZE;
+        if (*(const uint32_t *)q != (uint32_t)(e + 1)) return 0;
+        if (q[36] != EXPECTED_FLAGS[e]) return 0;
+        if (!key_like(q + 4)) return 0;
+    }
     return 1;
 }
 
