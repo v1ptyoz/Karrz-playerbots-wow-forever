@@ -595,8 +595,24 @@ DYLD_ENV_ENTITLEMENT = "com.apple.security.cs.allow-dyld-environment-variables"
 DISABLE_LV_ENTITLEMENT = "com.apple.security.cs.disable-library-validation"
 
 
-def make_signed_copy(app, dst, extra_entitlements=()):
-    """APFS-clone app to dst and re-sign it ad-hoc (no hardened runtime, so dyld honours DYLD_* and loads our module)."""
+def resign_adhoc(app, dst_exe, extra_entitlements=()):
+    """Re-sign just the program (not the whole bundle: data files such as icudt*.dat sit beside it and are not
+    signable, and we launch the program directly, so its own signature is what dyld reads) ad-hoc, no hardened
+    runtime, keeping the entitlements an ad-hoc signature may carry plus the given extras."""
+    ent = {k: v for k, v in entitlements_of(app).items() if k.startswith(ALLOWED_ENTITLEMENT_PREFIXES)}
+    for k in extra_entitlements:
+        ent[k] = True
+    ent_file = os.path.join(HOME, "client-entitlements.plist")
+    os.makedirs(HOME, exist_ok=True)
+    with open(ent_file, "wb") as f:
+        plistlib.dump(ent, f)
+    run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, dst_exe])
+    run(["codesign", "--verify", "--strict", dst_exe])
+    return ent
+
+
+def make_signed_copy(app, dst, dst_exe, extra_entitlements=()):
+    """APFS-clone app to dst and re-sign the program ad-hoc so dyld honours DYLD_* and loads our module."""
     if os.path.exists(dst):
         say("Removing the old copy")
         shutil.rmtree(dst)
@@ -605,16 +621,7 @@ def make_signed_copy(app, dst, extra_entitlements=()):
     if r.returncode != 0:
         run(["ditto", app, dst])
     run(["xattr", "-dr", "com.apple.quarantine", dst], check=False)
-    ent = {k: v for k, v in entitlements_of(app).items() if k.startswith(ALLOWED_ENTITLEMENT_PREFIXES)}
-    for k in extra_entitlements:
-        ent[k] = True
-    ent_file = os.path.join(HOME, "client-entitlements.plist")
-    os.makedirs(HOME, exist_ok=True)
-    with open(ent_file, "wb") as f:
-        plistlib.dump(ent, f)
-    run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, dst])
-    run(["codesign", "--verify", "--strict", dst])
-    return ent
+    return resign_adhoc(app, dst_exe, extra_entitlements)
 
 
 def cmd_prepare(args):
@@ -623,10 +630,11 @@ def cmd_prepare(args):
     app = find_original_app(flavor_dir(root))
     exe = app_executable(app)
     dst = copy_path(app)
+    dst_exe = os.path.join(dst, os.path.relpath(exe, app))
     orig_hash = sha256_of(exe)
     say("Original : %s" % app)
     say("Copy     : %s" % dst)
-    ent = make_signed_copy(app, dst, (DYLD_ENV_ENTITLEMENT, DISABLE_LV_ENTITLEMENT))
+    ent = make_signed_copy(app, dst, dst_exe, (DYLD_ENV_ENTITLEMENT, DISABLE_LV_ENTITLEMENT))
     if sha256_of(exe) != orig_hash:
         fail("The original program changed. Repair the game in Battle.net.")
     with open(os.path.join(dst, "Contents", "forever-prepare.json"), "w") as f:
@@ -695,8 +703,8 @@ def cmd_patch(args):
     os.makedirs(HOME, exist_ok=True)
     with open(ent_file, "wb") as f:
         plistlib.dump(ent, f)
-    run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, dst])
-    run(["codesign", "--verify", "--strict", dst])
+    run(["codesign", "--force", "--sign", "-", "--entitlements", ent_file, dst_exe])
+    run(["codesign", "--verify", "--strict", dst_exe])
 
     with open(dst_exe, "rb") as f:
         check = f.read()
