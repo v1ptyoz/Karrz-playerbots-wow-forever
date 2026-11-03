@@ -75,6 +75,10 @@ if [ $SKIP_DEPS -eq 0 ]; then
         info "brew install$missing"
         # shellcheck disable=SC2086
         brew install $missing
+        # remembered for macos/uninstall.sh: only what this project added is removed again
+        added="${WOWF_BREW_ADDED:-}"
+        for p in $missing; do case " $added " in *" $p "*) ;; *) added="${added:+$added }$p" ;; esac; done
+        save_env WOWF_BREW_ADDED "$added"
     fi
     ok "Packages: $BREW_PACKAGES"
 fi

@@ -141,6 +141,13 @@ allow incoming connections for worldserver and bnetserver when macOS asks (TCP 1
 
 ## Remove
 
-`wowforever.sh stop`, then delete `~/WoWForever`, the line with `trinity.actual.battle.net` in `/etc/hosts`
-(`sudo nano /etc/hosts`), the "WoW Forever Bots local CA" in Keychain Access (System keychain), and, if you like, the
-databases (`mysql -uroot -e "DROP DATABASE auth; DROP DATABASE characters; DROP DATABASE world; DROP DATABASE hotfixes; DROP DATABASE playerbot;"`).
+```bash
+~/WoWForever/app/macos/uninstall.sh
+```
+
+It asks before each part and removes everything the install made: it stops the server, deletes the patched game copy
+and the add-on (official settings and cache go back; the original game app is never touched), drops the databases and
+the MySQL user `trinity`, removes the login certificate from the System keychain and the `trinity.actual.battle.net`
+line from `/etc/hosts` (a copy stays in `/etc/hosts.wowforever-backup`), the Desktop icon and `~/WoWForever`
+(the database backups can be kept in `~/WoWForever-backups`), and finally the Homebrew packages this project
+installed. Homebrew itself stays. `--yes` removes everything without asking.

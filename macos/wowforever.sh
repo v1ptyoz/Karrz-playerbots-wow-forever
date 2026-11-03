@@ -15,6 +15,7 @@
 #   macos/wowforever.sh discord       open our Discord
 #   macos/wowforever.sh play          play with the macOS game client (starts the server if needed)
 #   macos/wowforever.sh client scout|patch|restore|remove|status   the macOS client copy (macos/forever_client.py)
+#   macos/wowforever.sh uninstall     remove everything again (macos/uninstall.sh)
 #
 # The servers run in a tmux session called "wowforever" (windows "world" and "bnet"), so they keep running when the
 # Terminal window is closed; the Mac is kept awake while worldserver runs.
@@ -327,6 +328,7 @@ case "${1:-menu}" in
     discord)     open "$WOWF_DISCORD" ;;
     play)        cmd_play ;;
     client)      shift; client_tool "${1:-status}" "${@:2}" ;;
-    -h|--help)   sed -n '2,21p' "$0" ;;
+    uninstall)   shift; exec "$WOWF_REPO/macos/uninstall.sh" "$@" ;;
+    -h|--help)   sed -n '2,22p' "$0" ;;
     *)           die "Unknown command: $1 (see --help)" ;;
 esac
