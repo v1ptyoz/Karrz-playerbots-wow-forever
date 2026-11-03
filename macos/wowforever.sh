@@ -86,6 +86,7 @@ cmd_start() {
     [ -f "$WOWF_LOGS/Server.log" ] && log_size=$(wc -c < "$WOWF_LOGS/Server.log" | tr -d ' ')
     local wrun="$WOWF_HOME/.run-worldserver.sh" brun="$WOWF_HOME/.run-bnetserver.sh"
     mkdir -p "$WOWF_ETC/worldserver.conf.d" "$WOWF_ETC/bnetserver.conf.d"
+    drop_empty_confs "$WOWF_ETC/worldserver.conf.d"; drop_empty_confs "$WOWF_ETC/bnetserver.conf.d"
     # --config-dir: a ready-made server was built elsewhere, so its built-in default folder is not this Mac's
     loop_cmd worldserver "./worldserver -c \"$WOWF_ETC/worldserver.conf\" --config-dir \"$WOWF_ETC/worldserver.conf.d\"" > "$wrun"
     loop_cmd bnetserver "./bnetserver -c \"$WOWF_ETC/bnetserver.conf\" --config-dir \"$WOWF_ETC/bnetserver.conf.d\"" > "$brun"

@@ -136,6 +136,18 @@ client_flavor() {   # client_flavor <game folder>  -> prints the folder name
     return 1
 }
 
+# worldserver stops at a file in worldserver.conf.d that holds no setting at all ("empty file"): set those aside
+drop_empty_confs() {   # drop_empty_confs <conf.d folder>
+    local f
+    for f in "$1"/*.conf; do
+        [ -f "$f" ] || continue
+        if ! grep -qE '^[[:space:]]*[A-Za-z0-9_.]+[[:space:]]*=' "$f"; then
+            mv -f "$f" "$f.empty"
+            warn "$(basename "$f") has no settings (worldserver refuses such a file): renamed to $(basename "$f").empty"
+        fi
+    done
+}
+
 # --- MySQL --------------------------------------------------------------------------------------------------------
 # Admin access: Homebrew's MySQL lets the macOS user in as root over the socket without a password.
 # If you gave root a password yourself, the scripts ask for it once per run (MYSQL_PWD, never written to disk).

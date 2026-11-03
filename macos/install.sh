@@ -115,15 +115,15 @@ write_configs() {
 
     # Smaller Macs: fewer world bots (the defaults are made for a 32 GB PC). Only written once; edit or delete it freely.
     local local_conf="$confd/zz-9-local.conf" gb; gb="$(ram_gb)"
-    if [ ! -f "$local_conf" ]; then
+    # (worldserver refuses a file in this folder without any setting, so it is only made when it has some)
+    if [ ! -f "$local_conf" ] && [ "$gb" -lt 16 ]; then
         {
             echo "# Your own settings (read after the other files in this folder). Made by macos/install.sh for a ${gb} GB Mac."
-            if [ "$gb" -lt 16 ]; then
-                echo "Playerbot.World.MaxBots = 100"
-                echo "Playerbot.World.GlobalFill = 0"
-            fi
+            echo "Playerbot.World.MaxBots = 100"
+            echo "Playerbot.World.GlobalFill = 0"
         } > "$local_conf"
     fi
+    drop_empty_confs "$confd"
     chmod 600 "$bnet" "$world"
     ok "bnetserver.conf, worldserver.conf, worldserver.conf.d/"
 }
