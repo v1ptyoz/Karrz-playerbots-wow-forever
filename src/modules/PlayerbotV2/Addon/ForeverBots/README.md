@@ -3,7 +3,7 @@
 A small Classic 1.60 addon with buttons for the server's `.bot` commands. It only sends ordinary chat, so it
 does not depend on the addon-message protocol PlayerbotControl uses.
 
-Install: copy this folder to `<client>\_classic_beta_\Interface\AddOns\ForeverBots` (the folder name must stay
+Install: copy this folder to `<client>\_forever_\Interface\AddOns\ForeverBots` (the folder name must stay
 `ForeverBots`). If the character screen's AddOns list marks it out of date, tick "Load out of date AddOns".
 
 In game: `/fb` opens the window. The Raid ready button (or `/fb raidready`) calls your saved bots (`.bot summon saved`) when you are alone (already in a group, it uses that group and never changes it), makes the group a raid if needed, sets formation and spacing, and starts a ready check once the bots have buffed.

@@ -9,7 +9,7 @@ the add-on, and a menu with Start, Shut down, Auto-restart, Update, Create accou
 - macOS 26 or newer (14 or newer works too), 16 GB RAM or more (8 GB runs with fewer world bots), about 60 GB free disk
   while the maps are extracted (about 15 GB stay: source, build, server, maps).
 - The WoW Forever game from Battle.net for macOS, build **70707** (the folder that holds `.build.info` and
-  `_classic_beta_`). See [The game client on a Mac](#the-game-client-on-a-mac).
+  `_forever_`). See [The game client on a Mac](#the-game-client-on-a-mac).
 - An internet connection for the first install (Homebrew packages, the core source, the world database).
 
 Nothing else: the scripts install the Xcode Command Line Tools and Homebrew if they are missing, and then
@@ -48,7 +48,7 @@ It asks for your Mac password twice (to trust the login certificate and to add t
    and the server certificate; the CA is trusted in the System keychain. **Hosts line**: `127.0.0.1 trinity.actual.battle.net`.
 6. **Maps**: dbc, maps, vmaps and the bot pathing (mmaps) from your own client (`tools/extract_client_data.sh`), 10 to 20 minutes.
    If it is interrupted, run `install.sh` again: it continues where it stopped.
-7. **Add-on**: copies ForeverBots into `_classic_beta_/Interface/AddOns`.
+7. **Add-on**: copies ForeverBots into `_forever_/Interface/AddOns`.
 8. A **WoW Forever Bots** icon on the Desktop, then it starts the server and offers to create your account.
 
 Options: `--client "/path/to/game folder"`, `--vanilla-dump world_full_14_june_2021.sql` (also builds the vanilla 1.12

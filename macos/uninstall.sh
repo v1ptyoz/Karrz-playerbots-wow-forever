@@ -61,8 +61,10 @@ if [ -n "${WOWF_CLIENT:-}" ] && [ -d "$WOWF_CLIENT" ]; then
         WOWF_HOME="$WOWF_HOME" python3 -I "$WOWF_UNINSTALL_COPY/macos/forever_client.py" remove --client "$WOWF_CLIENT" \
             || warn "Could not remove the patched copy (quit the game and run this again)."
     fi
-    addon="$WOWF_CLIENT/_classic_beta_/Interface/AddOns/ForeverBots"
-    if [ -d "$addon" ]; then rm -rf "$addon"; ok "Add-on removed"; fi
+    fl="$(client_flavor "$WOWF_CLIENT" || true)"
+    if [ -n "$fl" ] && [ -d "$WOWF_CLIENT/$fl/Interface/AddOns/ForeverBots" ]; then
+        rm -rf "$WOWF_CLIENT/$fl/Interface/AddOns/ForeverBots"; ok "Add-on removed"
+    fi
 else
     say "No game folder recorded: nothing to do"
 fi

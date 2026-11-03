@@ -12,7 +12,7 @@
 #       --output-path "/path/to/server/bin" \
 #       [--tools-path DIR] [--maps-only] [--resume] [--threads N] [--locale enUS]
 #
-#   --client-path  the game folder that holds .build.info (and _classic_beta_)
+#   --client-path  the game folder that holds .build.info (and _forever_)
 #   --output-path  where dbc/ maps/ vmaps/ mmaps/ Cameras/ gt/ are written (the server's DataDir)
 #   --tools-path   where mapextractor, vmap4extractor, vmap4assembler and mmaps_generator are (default: --output-path)
 #   --maps-only    stop after mapextractor (road workflow)
@@ -22,6 +22,7 @@
 #                  the intermediate Buildings/ and dir_bin/ folders (about 40 GB) are removed at the end
 #   --threads N    workers for vmap4extractor, vmap4assembler and mmaps_generator (default: all cores)
 #   --locale X     DBC locale (enUS, deDE, frFR, ...), default enUS
+#   --product X    the CASC product to open (default: read from .build.info, the Forever one first)
 #
 # Works with the bash 3.2 that ships with macOS and with GNU or BSD tools.
 
@@ -34,6 +35,7 @@ MAPS_ONLY=0
 RESUME=0
 THREADS=0
 LOCALE="enUS"
+PRODUCT=""
 
 die() {
     printf '\nERROR: %s\n' "$*" >&2
@@ -54,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         --resume)      RESUME=1; shift ;;
         --threads)     THREADS="$2"; shift 2 ;;
         --locale)      LOCALE="$2"; shift 2 ;;
+        --product)     PRODUCT="$2"; shift 2 ;;
         -h|--help)     usage ;;
         *)             die "Unknown argument: $1 (use --help)" ;;
     esac
@@ -140,13 +143,24 @@ done
 CLIENT_PATH="$(cd "$CLIENT_PATH" && pwd)"
 if [[ ! -f "$CLIENT_PATH/.build.info" && ! -d "$CLIENT_PATH/Data" ]]; then
     die "ClientPath '$CLIENT_PATH' has no .build.info or Data/ - not a valid WoW install root.
-Point at the folder that holds .build.info (not at _classic_beta_ or Data/)."
+Point at the folder that holds .build.info (not at _forever_ or Data/)."
 fi
+
+# the CASC product: the client's .build.info lists every installed one (Product column, Active = 1)
+if [[ -z "$PRODUCT" && -f "$CLIENT_PATH/.build.info" ]]; then
+    products="$(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,"!"); if(a[1]=="Product")p=i; if(a[1]=="Active")ac=i}; next}
+                         p && (!ac || $ac=="1") && $p!="" {print $p}' "$CLIENT_PATH/.build.info" | tr -d '\r' || true)"
+    PRODUCT="$(printf '%s\n' "$products" | grep -i forever | head -1 || true)"
+    [[ -n "$PRODUCT" ]] || PRODUCT="$(printf '%s\n' "$products" | grep -x wow_classic_beta | head -1 || true)"
+    [[ -n "$PRODUCT" ]] || PRODUCT="$(printf '%s\n' "$products" | head -1 || true)"
+fi
+[[ -n "$PRODUCT" ]] || PRODUCT="wow_classic_beta"
 
 printf 'Client : %s\n' "$CLIENT_PATH"
 printf 'Output : %s\n' "$OUTPUT_PATH"
 printf 'Tools  : %s\n' "$TOOLS_PATH"
 printf 'Locale : %s\n' "$LOCALE"
+printf 'Product: %s\n' "$PRODUCT"
 if [[ $THREADS -le 0 ]]; then printf 'Threads: (all cores)\n'; else printf 'Threads: %s\n' "$THREADS"; fi
 mode='FULL'; [[ $MAPS_ONLY -eq 1 ]] && mode='MAPS-ONLY (road workflow)'
 [[ $RESUME -eq 1 ]] && mode="$mode (resumable)"
@@ -164,7 +178,7 @@ if is_done maps; then
 else
     e_flag=15
     [[ $MAPS_ONLY -eq 1 ]] && e_flag=3
-    "$TOOLS_PATH/mapextractor" -i "$CLIENT_PATH" -o "$OUTPUT_PATH" -e "$e_flag" -f 1 -l "$LOCALE" \
+    "$TOOLS_PATH/mapextractor" -i "$CLIENT_PATH" -o "$OUTPUT_PATH" -e "$e_flag" -f 1 -l "$LOCALE" -p "$PRODUCT" \
         || die "mapextractor failed (exit $?). Check the output above; usual culprits: CASC init failure, wrong client path."
     set_done maps
 fi
@@ -183,7 +197,7 @@ if is_done vmaps; then
 else
     step "Step 2/4: vmap4extractor (CASC -> Buildings/)"
     [[ $RESUME -eq 1 ]] && clean_intermediate   # a half-finished earlier run
-    vmap_args=(-d "$CLIENT_PATH")
+    vmap_args=(-d "$CLIENT_PATH" -p "$PRODUCT")
     [[ $THREADS -gt 0 ]] && vmap_args+=(--threads "$THREADS")
     "$TOOLS_PATH/vmap4extractor" "${vmap_args[@]}" \
         || die "vmap4extractor failed (exit $?). Delete Buildings/ and dir_bin/ if they have leftovers from a prior run."

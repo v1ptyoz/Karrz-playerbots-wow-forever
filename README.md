@@ -39,7 +39,7 @@ It only works on a server that runs these bots (ask the server owner).
 
 1. Download [`addon/ForeverBots-addon.zip`](addon/ForeverBots-addon.zip) (use the Download button on that page) and unzip it,
    or copy the folder [`addon/ForeverBots`](addon/ForeverBots).
-2. Put the folder `ForeverBots` into `<your WoW folder>/_classic_beta_/Interface/AddOns/`
+2. Put the folder `ForeverBots` into `<your WoW folder>/_forever_/Interface/AddOns/`
    (so that `.../AddOns/ForeverBots/ForeverBots.toc` exists). Do not rename the folder.
    On a Mac `macos/install-addon.sh` does it for you.
 3. Start the game. If the AddOns list marks it out of date, tick "Load out of date AddOns". In game type `/reload`, then `/fb`.
@@ -86,7 +86,7 @@ Anyone can build the server Karrz plays on. These are the steps in order; the re
 2. **Vanilla data.** Download the VMaNGOS world dump (`world_full_14_june_2021`) yourself and run `python3 tools/classic_spell_values/build_vanilla_data.py --dump <file>`. It writes the vanilla (1.12) spell, creature and boss numbers as SQL files that the server applies at start. See [`tools/classic_spell_values/README.md`](tools/classic_spell_values/README.md).
 3. **Maps.** Extract the maps, vmaps and mmaps from your own client with the tools built in step 1: `tools/extract_client_data.sh` (macOS / Linux) runs `mapextractor`, `vmap4extractor`, `vmap4assembler` and `mmaps_generator` in order. Put the result in `DataDir`. No map files are included, and the map format is the stock TrinityCore one. The mmaps (pathfinding data) are REQUIRED for the bots: without them they cannot walk, and the server logs "Could not load MMAP ... result: 2". The full run takes about 10 to 20 minutes on a modern PC and about 45 GB of free disk while it works (about 2 GB are left); the script can be started again after an interruption with `--resume`. Never copy someone else's mmaps: they are made from your own client.
 4. **Config.** Create the bot database (`INSTALL-BOTS.md`, step 3), rename `playerbot.conf.dist` to `playerbot.conf` in `worldserver.conf.d`, and copy [`examples/karrz-realm.conf`](examples/karrz-realm.conf) into the same folder. It holds the realm's world bots and 50/50 faction balance, the battleground rules, the raid switches (solo raid entry, saved on entry, trash stays dead, no Molten Core runes, no attunements, open Ahn'Qiraj gates), the auction house bot and the logging. Lower the bot numbers in it on a smaller machine. The first start creates a few thousand roster characters, which takes about two hours.
-5. **Add-on.** Copy `src/modules/PlayerbotV2/Addon/ForeverBots` into `<WoW folder>/_classic_beta_/Interface/AddOns/` (the public repository also has it ready as `ForeverBots-addon.zip`). Type `/fb` in game.
+5. **Add-on.** Copy `src/modules/PlayerbotV2/Addon/ForeverBots` into `<WoW folder>/_forever_/Interface/AddOns/` (the public repository also has it ready as `ForeverBots-addon.zip`). Type `/fb` in game.
 
 ## Credits and licenses
 

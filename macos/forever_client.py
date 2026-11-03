@@ -163,15 +163,16 @@ def find_client_root(arg):
 
 
 def flavor_dir(root):
-    d = os.path.join(root, "_classic_beta_")
-    if os.path.isdir(d):
-        return d
+    for name in ("_forever_", "_classic_beta_"):
+        d = os.path.join(root, name)
+        if os.path.isdir(d):
+            return d
     cands = [os.path.join(root, n) for n in sorted(os.listdir(root))
              if n.startswith("_") and n.endswith("_") and os.path.isdir(os.path.join(root, n))
              and any(x.endswith(".app") for x in os.listdir(os.path.join(root, n)))]
     if len(cands) == 1:
         return cands[0]
-    fail("%s has no _classic_beta_ folder (found: %s)." % (root, ", ".join(os.path.basename(c) for c in cands) or "none"))
+    fail("%s has no _forever_ folder (found: %s)." % (root, ", ".join(os.path.basename(c) for c in cands) or "none"))
 
 
 def find_original_app(flavor):
@@ -667,7 +668,7 @@ def cmd_status(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("command", choices=["scout", "patch", "play", "restore", "remove", "status"])
-    ap.add_argument("--client", help="the game folder (holds .build.info and _classic_beta_)")
+    ap.add_argument("--client", help="the game folder (holds .build.info and _forever_)")
     ap.add_argument("--table", action="append", metavar="CPU:OFFSET:COUNT",
                     help="patch: the key table by hand (from a reviewed scout report), once per part (x86_64, arm64)")
     ap.add_argument("--expect-sha256", help="patch with --table: the program's sha256 from the scout report")

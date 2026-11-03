@@ -123,6 +123,19 @@ save_env() {   # save_env KEY VALUE: remembers a setting in wowforever.env
     eval "$key=\$val"
 }
 
+# --- game client ----------------------------------------------------------------------------------------------
+# The game's own folder inside the game folder: _forever_ (older test builds: _classic_beta_).
+client_flavor() {   # client_flavor <game folder>  -> prints the folder name
+    local n
+    for n in _forever_ _classic_beta_; do
+        if [ -d "$1/$n" ]; then echo "$n"; return 0; fi
+    done
+    for n in "$1"/_*_; do
+        if [ -d "$n" ]; then basename "$n"; return 0; fi
+    done
+    return 1
+}
+
 # --- MySQL --------------------------------------------------------------------------------------------------------
 # Admin access: Homebrew's MySQL lets the macOS user in as root over the socket without a password.
 # If you gave root a password yourself, the scripts ask for it once per run (MYSQL_PWD, never written to disk).

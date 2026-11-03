@@ -6,7 +6,7 @@
 #   starts the server and offers to create your account.
 #
 #   macos/install.sh
-#   macos/install.sh --client "/path/to/World of Warcraft"     the game folder (holds .build.info and _classic_beta_)
+#   macos/install.sh --client "/path/to/World of Warcraft"     the game folder (holds .build.info and _forever_)
 #   macos/install.sh --vanilla-dump world_full_14_june_2021.sql also build the vanilla (1.12) numbers from the VMaNGOS dump
 #   macos/install.sh --configs-only                             only (re)write the configs; keeps your own settings
 #   macos/install.sh --no-start                                 do not start the server at the end
@@ -242,7 +242,7 @@ setup_hosts() {
 # ===================================================================================================================
 # game folder + maps
 # ===================================================================================================================
-is_client_dir() { [ -f "$1/.build.info" ] && { [ -d "$1/_classic_beta_" ] || ls "$1"/WowB*.exe >/dev/null 2>&1; }; }
+is_client_dir() { [ -f "$1/.build.info" ] && client_flavor "$1" >/dev/null; }
 
 find_client() {
     local roots=("$HOME/Applications" "/Applications" "$HOME/Games" "$HOME/Desktop" "$HOME/Downloads" "$HOME/Documents"
@@ -264,7 +264,7 @@ choose_client() {
     if [ -n "$c" ] && is_client_dir "$c"; then
         save_env WOWF_CLIENT "$(cd "$c" && pwd)"; ok "$WOWF_CLIENT"; return
     fi
-    info "Looking for the game folder (the one with .build.info and _classic_beta_)..."
+    info "Looking for the game folder (the one with .build.info and _forever_)..."
     local found first
     found="$(find_client)"
     # the folder of the right build first
@@ -279,7 +279,7 @@ choose_client() {
         c="${c%/}"
     fi
     [ -n "$c" ] || die "No game folder chosen. Run again with --client \"/path/to/the/folder\"."
-    is_client_dir "$c" || die "$c has no .build.info and _classic_beta_ folder."
+    is_client_dir "$c" || die "$c has no .build.info and _forever_ folder."
     grep -q "$WOWF_CLIENT_BUILD" "$c/.build.info" 2>/dev/null || warn "$c does not look like build $WOWF_CLIENT_BUILD."
     save_env WOWF_CLIENT "$(cd "$c" && pwd)"
     ok "$WOWF_CLIENT"
