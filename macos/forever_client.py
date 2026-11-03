@@ -733,7 +733,8 @@ def cmd_probe(args):
     if not os.path.isdir(dst) or not os.path.isfile(os.path.join(dst, "Contents", "forever-prepare.json")):
         fail("Run 'client prepare' first (it makes the signed copy).")
     dylib = build_inject()
-    log = run_injected(dst_exe, dylib, args.seconds or 40, "locate", getattr(args, "dump", None))
+    mode = "verify" if getattr(args, "verify", False) else "locate"
+    log = run_injected(dst_exe, dylib, args.seconds or 40, mode, getattr(args, "dump", None))
     say("")
     if os.path.isfile(log):
         with open(log) as f:
@@ -975,6 +976,7 @@ def main():
     ap.add_argument("--expect-sha256", help="patch with --table: the program's sha256 from the scout report")
     ap.add_argument("--seconds", type=int, help="probe: how long to let the game run before reading memory")
     ap.add_argument("--dump", help="probe: dump a raw vmaddr window instead of searching, as 0xVMADDR:0xLEN")
+    ap.add_argument("--verify", action="store_true", help="probe: find the verify routine (uses context and seed) and dump its key operand")
     args = ap.parse_args()
     if sys.platform != "darwin" and args.command != "scout":
         fail("This is for macOS.")
