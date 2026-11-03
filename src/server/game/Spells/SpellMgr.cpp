@@ -3458,6 +3458,7 @@ void SpellMgr::LoadClassicSpellInfo()
                 SpellDurationEntry& row = mClassicDurations.emplace_back();
                 row.ID = spellInfo.DurationEntry ? spellInfo.DurationEntry->ID : 0;
                 row.Duration = row.MaxDuration = fields[4].GetInt32();
+                row.DurationPerLevel = 0;
                 row.DurationPerResource = 0;
                 spellInfo.DurationEntry = &row;
             }
