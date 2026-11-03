@@ -15,6 +15,7 @@
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
+ORIG_ARGS=("$@")
 CLIENT_ARG=""; VANILLA_DUMP=""; CONFIGS_ONLY=0; NO_START=0
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -40,7 +41,9 @@ if [ -d "$WOWF_REPO/prebuilt" ] && [ "$WOWF_REPO" != "$WOWF_APP" ]; then
     xattr -dr com.apple.quarantine "$WOWF_REPO" 2>/dev/null || true
     mkdir -p "$WOWF_APP"
     rsync -a --delete --filter 'P sql/custom/world/2026_10_12_5*_world_classic_vanilla_*.sql' "$WOWF_REPO/" "$WOWF_APP/"
-    exec "$WOWF_APP/macos/install.sh" "$@"
+    [ -x "$WOWF_APP/macos/install.sh" ] || die "Copying to $WOWF_APP failed (rsync)."
+    info "Continuing from $WOWF_APP"
+    exec /bin/bash "$WOWF_APP/macos/install.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
 fi
 
 # --- server programs ------------------------------------------------------------------------------------------------
